@@ -19,11 +19,9 @@ class SoilSensorApp extends StatefulWidget {
 class _SoilSensorAppState extends State<SoilSensorApp> {
   final String espIP = "192.168.4.1"; // ESP8266 IP
 
-  double moisture = 0;
   double pH = 7.0;
   int N = 0, P = 0, K = 0;
 
-  List<double> moistureReadings = [];
   List<double> pHReadings = [];
 
   Timer? _timer;
@@ -49,16 +47,13 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
-          moisture = data["moisture"].toDouble();
           pH = data["pH"].toDouble();
           N = data["N"];
           P = data["P"];
           K = data["K"];
 
-          moistureReadings.add(moisture);
           pHReadings.add(pH);
 
-          if (moistureReadings.length > 20) moistureReadings.removeAt(0);
           if (pHReadings.length > 20) pHReadings.removeAt(0);
         });
       }
@@ -69,17 +64,9 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
 
   // Alert messages
   String getAlertMessage() {
-    if (moisture < 30) return "⚠️ Soil is too dry. Consider watering.";
-    if (moisture > 80) return "⚠️ Soil is waterlogged. Reduce watering.";
     if (pH < 5.5) return "⚠️ Soil too acidic. Add lime.";
     if (pH > 7.5) return "⚠️ Soil too alkaline. Add sulfur.";
     return "✅ Soil conditions look healthy!";
-  }
-
-  Color getMoistureColor() {
-    if (moisture < 30) return Colors.red;
-    if (moisture < 60) return Colors.orange;
-    return Colors.green;
   }
 
   Color getpHColor() {
@@ -114,10 +101,11 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
                   child: Column(
                     children: [
                       Text("Overall Soil Health",
-                          style: Theme.of(context).textTheme.titleLarge),
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              color: isDarkMode ? Colors.white : Colors.black)),
                       const SizedBox(height: 10),
                       Text(getAlertMessage(),
-                          style: TextStyle(fontSize: 16, color: getMoistureColor())),
+                          style: TextStyle(fontSize: 16, color: getpHColor())),
                     ],
                   ),
                 ),
@@ -127,16 +115,8 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
 
               // Gauges Row
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularPercentIndicator(
-                    radius: 60,
-                    lineWidth: 12,
-                    percent: (moisture / 100).clamp(0.0, 1.0),
-                    center: Text("${moisture.toStringAsFixed(0)}%"),
-                    progressColor: getMoistureColor(),
-                    footer: const Text("Moisture"),
-                  ),
                   CircularPercentIndicator(
                     radius: 60,
                     lineWidth: 12,
@@ -178,14 +158,13 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
 
               // Graphs with Tabs
               DefaultTabController(
-                length: 2,
+                length: 1,
                 child: Column(
                   children: [
                     const TabBar(
                       labelColor: Colors.green,
                       unselectedLabelColor: Colors.grey,
                       tabs: [
-                        Tab(icon: Icon(Icons.water_drop), text: "Moisture"),
                         Tab(icon: Icon(Icons.bubble_chart), text: "pH"),
                       ],
                     ),
@@ -193,7 +172,6 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
                       height: 250,
                       child: TabBarView(
                         children: [
-                          _buildLineChart(moistureReadings, 0, 100, Colors.blue),
                           _buildLineChart(pHReadings, 0, 14, Colors.green),
                         ],
                       ),
