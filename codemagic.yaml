@@ -21,14 +21,16 @@ workflows:
           echo "keyAlias=$KEY_ALIAS" >> android/key.properties
           echo "storeFile=$KEYSTORE_FILE" >> android/key.properties
 
-      # 3️⃣ Build APK
+      # 3️⃣ Build release APK
       - name: Build release APK
-        script: flutter build apk --release
+        script: flutter build apk --release --no-shrink
 
-      # 4️⃣ (Optional) Build AAB
-      #- name: Build release AAB
-      #  script: flutter build appbundle --release
+      # 4️⃣ Build release AAB (optional for Play Store)
+      - name: Build release AAB
+        script: flutter build appbundle --release --no-shrink
 
     artifacts:
+      # APK for direct installation
       - build/app/outputs/flutter-apk/app-release.apk
-      #- build/app/outputs/bundle/release/app-release.aab
+      # AAB for Play Store
+      - build/app/outputs/bundle/release/app-release.aab
