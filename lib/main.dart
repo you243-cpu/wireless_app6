@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
 import 'package:csv/csv.dart';
+import 'package:intl/intl.dart';
 
 void main() {
   runApp(const SoilSensorApp());
@@ -33,18 +34,14 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
   Timer? _timer;
   bool isDarkMode = false;
 
-  // Zoom/scroll controller
   final TransformationController _zoomController = TransformationController();
 
   @override
   void initState() {
     super.initState();
-    // Periodically try fetching from ESP
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
       fetchSensorData();
     });
-
-    // Load dummy CSV data at startup
     loadDummyCSV();
   }
 
@@ -111,7 +108,7 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
     }
   }
 
-  // Alert messages
+  // Alerts
   String getAlertMessage() {
     if (pH < 5.5) return "⚠️ Soil too acidic. Add lime.";
     if (pH > 7.5) return "⚠️ Soil too alkaline. Add sulfur.";
@@ -129,7 +126,6 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
     });
   }
 
-  // Auto-scale helper
   double _getMinY(List<double> data) {
     if (data.isEmpty) return 0;
     final minVal = data.reduce((a, b) => a < b ? a : b);
@@ -140,6 +136,12 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
     if (data.isEmpty) return 10;
     final maxVal = data.reduce((a, b) => a > b ? a : b);
     return maxVal + 5;
+  }
+
+  String _formatTimestamp(int index) {
+    if (index < 0 || index >= timestamps.length) return "";
+    final dt = timestamps[index];
+    return DateFormat("MM-dd HH:mm").format(dt);
   }
 
   @override
@@ -165,7 +167,6 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              // Dashboard summary
               Card(
                 elevation: 4,
                 shape: RoundedRectangleBorder(
@@ -175,13 +176,7 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
                   child: Column(
                     children: [
                       Text("Overall Soil Health",
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
-                              ?.copyWith(
-                                  color: isDarkMode
-                                      ? Colors.white
-                                      : Colors.black)),
+                          style: Theme.of(context).textTheme.titleLarge),
                       const SizedBox(height: 10),
                       Text(getAlertMessage(),
                           style: TextStyle(fontSize: 16, color: getpHColor())),
@@ -191,7 +186,7 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
               ),
               const SizedBox(height: 20),
 
-              // Gauges Row
+              // Gauges
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -207,7 +202,7 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
               ),
               const SizedBox(height: 20),
 
-              // Nutrient cards
+              // Nutrients
               Card(
                 elevation: 3,
                 child: Column(
@@ -232,7 +227,7 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
               ),
               const SizedBox(height: 20),
 
-              // Graphs with Tabs
+              // Graphs
               DefaultTabController(
                 length: 5,
                 child: Column(
@@ -271,7 +266,7 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
     );
   }
 
-  // Single line chart
+  // Single line chart with timestamps
   Widget _buildLineChart(List<double> data, Color color, String label) {
     return InteractiveViewer(
       transformationController: _zoomController,
@@ -281,7 +276,22 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
       child: LineChart(
         LineChartData(
           gridData: const FlGridData(show: true),
-          titlesData: const FlTitlesData(show: true),
+          titlesData: FlTitlesData(
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                interval: (data.length / 4).clamp(1, 10).toDouble(),
+                getTitlesWidget: (value, meta) {
+                  int index = value.toInt();
+                  if (index % 5 == 0 && index < timestamps.length) {
+                    return Text(_formatTimestamp(index),
+                        style: const TextStyle(fontSize: 10));
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+          ),
           borderData: FlBorderData(
               show: true, border: Border.all(color: Colors.grey, width: 1)),
           minX: 0,
@@ -319,7 +329,22 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
             child: LineChart(
               LineChartData(
                 gridData: const FlGridData(show: true),
-                titlesData: const FlTitlesData(show: true),
+                titlesData: FlTitlesData(
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: (pHReadings.length / 4).clamp(1, 10).toDouble(),
+                      getTitlesWidget: (value, meta) {
+                        int index = value.toInt();
+                        if (index % 5 == 0 && index < timestamps.length) {
+                          return Text(_formatTimestamp(index),
+                              style: const TextStyle(fontSize: 10));
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                ),
                 borderData: FlBorderData(
                     show: true, border: Border.all(color: Colors.grey, width: 1)),
                 minX: 0,
