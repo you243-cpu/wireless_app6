@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 
 void main() {
@@ -33,14 +32,20 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
 
   Timer? _timer;
   bool isDarkMode = false;
-  bool showAllGraphs = false;
+
+  // Zoom/scroll controller
+  final TransformationController _zoomController = TransformationController();
 
   @override
   void initState() {
     super.initState();
+    // Periodically try fetching from ESP
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
       fetchSensorData();
     });
+
+    // Load dummy CSV data at startup
+    loadDummyCSV();
   }
 
   @override
@@ -66,7 +71,7 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
           kReadings.add(K.toDouble());
           timestamps.add(DateTime.now());
 
-          if (pHReadings.length > 20) {
+          if (pHReadings.length > 50) {
             pHReadings.removeAt(0);
             nReadings.removeAt(0);
             pReadings.removeAt(0);
@@ -80,16 +85,9 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
     }
   }
 
-  // Load CSV data
-  Future<void> loadCSVData() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['csv'],
-    );
-
-    if (result != null) {
-      final file = File(result.files.single.path!);
-      final csvString = await file.readAsString();
+  Future<void> loadDummyCSV() async {
+    try {
+      final csvString = await rootBundle.loadString('assets/dummy_data.csv');
       final rows = const CsvToListConverter().convert(csvString, eol: "\n");
 
       setState(() {
@@ -101,13 +99,15 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
 
         for (var i = 1; i < rows.length; i++) {
           final row = rows[i];
-          timestamps.add(DateTime.parse(row[0])); // date column
+          timestamps.add(DateTime.parse(row[0]));
           pHReadings.add(row[1].toDouble());
           nReadings.add(row[2].toDouble());
           pReadings.add(row[3].toDouble());
           kReadings.add(row[4].toDouble());
         }
       });
+    } catch (e) {
+      print("CSV load error: $e");
     }
   }
 
@@ -123,6 +123,25 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
     return Colors.green;
   }
 
+  void resetZoom() {
+    setState(() {
+      _zoomController.value = Matrix4.identity();
+    });
+  }
+
+  // Auto-scale helper
+  double _getMinY(List<double> data) {
+    if (data.isEmpty) return 0;
+    final minVal = data.reduce((a, b) => a < b ? a : b);
+    return (minVal - 5).clamp(0, double.infinity);
+  }
+
+  double _getMaxY(List<double> data) {
+    if (data.isEmpty) return 10;
+    final maxVal = data.reduce((a, b) => a > b ? a : b);
+    return maxVal + 5;
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -132,18 +151,13 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
           title: const Text("🌱 Soil Sensor Dashboard"),
           actions: [
             IconButton(
-              icon: const Icon(Icons.upload_file),
-              onPressed: loadCSVData,
-              tooltip: "Import CSV",
-            ),
-            IconButton(
               icon: Icon(isDarkMode ? Icons.dark_mode : Icons.light_mode),
               onPressed: () => setState(() => isDarkMode = !isDarkMode),
             ),
             IconButton(
-              icon: Icon(showAllGraphs ? Icons.tab : Icons.grid_view),
-              onPressed: () => setState(() => showAllGraphs = !showAllGraphs),
-              tooltip: "Toggle Graph View",
+              icon: const Icon(Icons.refresh),
+              tooltip: "Reset Zoom",
+              onPressed: resetZoom,
             ),
           ],
         ),
@@ -151,7 +165,7 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              // Dashboard summary card
+              // Dashboard summary
               Card(
                 elevation: 4,
                 shape: RoundedRectangleBorder(
@@ -170,13 +184,11 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
                                       : Colors.black)),
                       const SizedBox(height: 10),
                       Text(getAlertMessage(),
-                          style:
-                              TextStyle(fontSize: 16, color: getpHColor())),
+                          style: TextStyle(fontSize: 16, color: getpHColor())),
                     ],
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
 
               // Gauges Row
@@ -193,7 +205,6 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 20),
 
               // Nutrient cards
@@ -219,73 +230,40 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 20),
 
-              // Graph Section
-              showAllGraphs
-                  ? Column(
-                      children: [
-                        SizedBox(
-                            height: 200,
-                            child: _buildLineChart(
-                                pHReadings, 0, 14, Colors.green, "pH")),
-                        SizedBox(
-                            height: 200,
-                            child: _buildLineChart(
-                                nReadings, 0, 100, Colors.blue, "Nitrogen")),
-                        SizedBox(
-                            height: 200,
-                            child: _buildLineChart(
-                                pReadings, 0, 100, Colors.orange, "Phosphorus")),
-                        SizedBox(
-                            height: 200,
-                            child: _buildLineChart(
-                                kReadings, 0, 100, Colors.purple, "Potassium")),
+              // Graphs with Tabs
+              DefaultTabController(
+                length: 5,
+                child: Column(
+                  children: [
+                    const TabBar(
+                      labelColor: Colors.green,
+                      unselectedLabelColor: Colors.grey,
+                      isScrollable: true,
+                      tabs: [
+                        Tab(icon: Icon(Icons.bubble_chart), text: "pH"),
+                        Tab(icon: Icon(Icons.science), text: "N"),
+                        Tab(icon: Icon(Icons.science), text: "P"),
+                        Tab(icon: Icon(Icons.science), text: "K"),
+                        Tab(icon: Icon(Icons.dashboard), text: "All"),
                       ],
-                    )
-                  : DefaultTabController(
-                      length: 4,
-                      child: Column(
+                    ),
+                    SizedBox(
+                      height: 350,
+                      child: TabBarView(
                         children: [
-                          const TabBar(
-                            labelColor: Colors.green,
-                            unselectedLabelColor: Colors.grey,
-                            tabs: [
-                              Tab(
-                                  icon: Icon(Icons.bubble_chart),
-                                  text: "pH"),
-                              Tab(
-                                  icon: Icon(Icons.science),
-                                  text: "N"),
-                              Tab(
-                                  icon: Icon(Icons.science),
-                                  text: "P"),
-                              Tab(
-                                  icon: Icon(Icons.science),
-                                  text: "K"),
-                            ],
-                          ),
-                          SizedBox(
-                            height: 250,
-                            child: TabBarView(
-                              children: [
-                                _buildLineChart(
-                                    pHReadings, 0, 14, Colors.green, "pH"),
-                                _buildLineChart(
-                                    nReadings, 0, 100, Colors.blue, "Nitrogen"),
-                                _buildLineChart(
-                                    pReadings, 0, 100, Colors.orange,
-                                    "Phosphorus"),
-                                _buildLineChart(
-                                    kReadings, 0, 100, Colors.purple,
-                                    "Potassium"),
-                              ],
-                            ),
-                          ),
+                          _buildLineChart(pHReadings, Colors.green, "pH"),
+                          _buildLineChart(nReadings, Colors.blue, "Nitrogen"),
+                          _buildLineChart(pReadings, Colors.orange, "Phosphorus"),
+                          _buildLineChart(kReadings, Colors.purple, "Potassium"),
+                          _buildMultiLineChart(),
                         ],
                       ),
                     ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -293,42 +271,107 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
     );
   }
 
-  // Chart builder function
-  Widget _buildLineChart(
-      List<double> data, double minY, double maxY, Color color, String label) {
-    return LineChart(
-      LineChartData(
-        gridData: const FlGridData(show: true),
-        titlesData: FlTitlesData(
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(showTitles: true),
-          ),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+  // Single line chart
+  Widget _buildLineChart(List<double> data, Color color, String label) {
+    return InteractiveViewer(
+      transformationController: _zoomController,
+      boundaryMargin: const EdgeInsets.all(20),
+      minScale: 0.5,
+      maxScale: 3.0,
+      child: LineChart(
+        LineChartData(
+          gridData: const FlGridData(show: true),
+          titlesData: const FlTitlesData(show: true),
+          borderData: FlBorderData(
+              show: true, border: Border.all(color: Colors.grey, width: 1)),
+          minX: 0,
+          maxX: (data.length - 1).toDouble(),
+          minY: _getMinY(data),
+          maxY: _getMaxY(data),
+          lineBarsData: [
+            LineChartBarData(
+              spots: data.asMap().entries
+                  .map((e) => FlSpot(e.key.toDouble(), e.value))
+                  .toList(),
+              isCurved: true,
+              color: color,
+              barWidth: 3,
+              dotData: const FlDotData(show: false),
+              belowBarData:
+                  BarAreaData(show: true, color: color.withOpacity(0.2)),
+            ),
+          ],
         ),
-        borderData: FlBorderData(
-            show: true, border: Border.all(color: Colors.grey, width: 1)),
-        minX: 0,
-        maxX: (data.length - 1).toDouble(),
-        minY: minY,
-        maxY: maxY,
-        lineBarsData: [
-          LineChartBarData(
-            spots: data.asMap().entries.map((e) {
-              return FlSpot(e.key.toDouble(), e.value);
-            }).toList(),
-            isCurved: true,
-            color: color,
-            barWidth: 3,
-            dotData: const FlDotData(show: false),
-            belowBarData:
-                BarAreaData(show: true, color: color.withOpacity(0.2)),
-          ),
-        ],
       ),
+    );
+  }
+
+  // Multi-line chart with legend
+  Widget _buildMultiLineChart() {
+    return Column(
+      children: [
+        Expanded(
+          child: InteractiveViewer(
+            transformationController: _zoomController,
+            boundaryMargin: const EdgeInsets.all(20),
+            minScale: 0.5,
+            maxScale: 3.0,
+            child: LineChart(
+              LineChartData(
+                gridData: const FlGridData(show: true),
+                titlesData: const FlTitlesData(show: true),
+                borderData: FlBorderData(
+                    show: true, border: Border.all(color: Colors.grey, width: 1)),
+                minX: 0,
+                maxX: (pHReadings.length - 1).toDouble(),
+                minY: _getMinY([...pHReadings, ...nReadings, ...pReadings, ...kReadings]),
+                maxY: _getMaxY([...pHReadings, ...nReadings, ...pReadings, ...kReadings]),
+                lineBarsData: [
+                  _makeLine(pHReadings, Colors.green),
+                  _makeLine(nReadings, Colors.blue),
+                  _makeLine(pReadings, Colors.orange),
+                  _makeLine(kReadings, Colors.purple),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 20,
+          children: [
+            _buildLegendItem(Colors.green, "pH"),
+            _buildLegendItem(Colors.blue, "Nitrogen (N)"),
+            _buildLegendItem(Colors.orange, "Phosphorus (P)"),
+            _buildLegendItem(Colors.purple, "Potassium (K)"),
+          ],
+        ),
+      ],
+    );
+  }
+
+  LineChartBarData _makeLine(List<double> data, Color color) {
+    return LineChartBarData(
+      spots: data.asMap().entries
+          .map((e) => FlSpot(e.key.toDouble(), e.value))
+          .toList(),
+      isCurved: true,
+      color: color,
+      barWidth: 3,
+      dotData: const FlDotData(show: false),
+      belowBarData: BarAreaData(show: true, color: color.withOpacity(0.2)),
+    );
+  }
+
+  Widget _buildLegendItem(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 16, height: 16, color: color),
+        const SizedBox(width: 6),
+        Text(label),
+      ],
     );
   }
 }
