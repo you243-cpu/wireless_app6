@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:fl_chart/fl_chart.dart';
-import 'package:percent_indicator/circular_percent_indicator.dart'; // For gauges
+import 'package:percent_indicator/circular_percent_indicator.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:csv/csv.dart';
 
 void main() {
   runApp(const SoilSensorApp());
@@ -23,9 +26,14 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
   int N = 0, P = 0, K = 0;
 
   List<double> pHReadings = [];
+  List<double> nReadings = [];
+  List<double> pReadings = [];
+  List<double> kReadings = [];
+  List<DateTime> timestamps = [];
 
   Timer? _timer;
-  bool isDarkMode = false; // For theme switching
+  bool isDarkMode = false;
+  bool showAllGraphs = false;
 
   @override
   void initState() {
@@ -53,12 +61,53 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
           K = data["K"];
 
           pHReadings.add(pH);
+          nReadings.add(N.toDouble());
+          pReadings.add(P.toDouble());
+          kReadings.add(K.toDouble());
+          timestamps.add(DateTime.now());
 
-          if (pHReadings.length > 20) pHReadings.removeAt(0);
+          if (pHReadings.length > 20) {
+            pHReadings.removeAt(0);
+            nReadings.removeAt(0);
+            pReadings.removeAt(0);
+            kReadings.removeAt(0);
+            timestamps.removeAt(0);
+          }
         });
       }
     } catch (e) {
       print("Fetch error: $e");
+    }
+  }
+
+  // Load CSV data
+  Future<void> loadCSVData() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+
+    if (result != null) {
+      final file = File(result.files.single.path!);
+      final csvString = await file.readAsString();
+      final rows = const CsvToListConverter().convert(csvString, eol: "\n");
+
+      setState(() {
+        pHReadings.clear();
+        nReadings.clear();
+        pReadings.clear();
+        kReadings.clear();
+        timestamps.clear();
+
+        for (var i = 1; i < rows.length; i++) {
+          final row = rows[i];
+          timestamps.add(DateTime.parse(row[0])); // date column
+          pHReadings.add(row[1].toDouble());
+          nReadings.add(row[2].toDouble());
+          pReadings.add(row[3].toDouble());
+          kReadings.add(row[4].toDouble());
+        }
+      });
     }
   }
 
@@ -83,8 +132,18 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
           title: const Text("🌱 Soil Sensor Dashboard"),
           actions: [
             IconButton(
+              icon: const Icon(Icons.upload_file),
+              onPressed: loadCSVData,
+              tooltip: "Import CSV",
+            ),
+            IconButton(
               icon: Icon(isDarkMode ? Icons.dark_mode : Icons.light_mode),
               onPressed: () => setState(() => isDarkMode = !isDarkMode),
+            ),
+            IconButton(
+              icon: Icon(showAllGraphs ? Icons.tab : Icons.grid_view),
+              onPressed: () => setState(() => showAllGraphs = !showAllGraphs),
+              tooltip: "Toggle Graph View",
             ),
           ],
         ),
@@ -95,17 +154,24 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
               // Dashboard summary card
               Card(
                 elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
                       Text("Overall Soil Health",
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: isDarkMode ? Colors.white : Colors.black)),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(
+                                  color: isDarkMode
+                                      ? Colors.white
+                                      : Colors.black)),
                       const SizedBox(height: 10),
                       Text(getAlertMessage(),
-                          style: TextStyle(fontSize: 16, color: getpHColor())),
+                          style:
+                              TextStyle(fontSize: 16, color: getpHColor())),
                     ],
                   ),
                 ),
@@ -156,29 +222,70 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
 
               const SizedBox(height: 20),
 
-              // Graphs with Tabs
-              DefaultTabController(
-                length: 1,
-                child: Column(
-                  children: [
-                    const TabBar(
-                      labelColor: Colors.green,
-                      unselectedLabelColor: Colors.grey,
-                      tabs: [
-                        Tab(icon: Icon(Icons.bubble_chart), text: "pH"),
+              // Graph Section
+              showAllGraphs
+                  ? Column(
+                      children: [
+                        SizedBox(
+                            height: 200,
+                            child: _buildLineChart(
+                                pHReadings, 0, 14, Colors.green, "pH")),
+                        SizedBox(
+                            height: 200,
+                            child: _buildLineChart(
+                                nReadings, 0, 100, Colors.blue, "Nitrogen")),
+                        SizedBox(
+                            height: 200,
+                            child: _buildLineChart(
+                                pReadings, 0, 100, Colors.orange, "Phosphorus")),
+                        SizedBox(
+                            height: 200,
+                            child: _buildLineChart(
+                                kReadings, 0, 100, Colors.purple, "Potassium")),
                       ],
-                    ),
-                    SizedBox(
-                      height: 250,
-                      child: TabBarView(
+                    )
+                  : DefaultTabController(
+                      length: 4,
+                      child: Column(
                         children: [
-                          _buildLineChart(pHReadings, 0, 14, Colors.green),
+                          const TabBar(
+                            labelColor: Colors.green,
+                            unselectedLabelColor: Colors.grey,
+                            tabs: [
+                              Tab(
+                                  icon: Icon(Icons.bubble_chart),
+                                  text: "pH"),
+                              Tab(
+                                  icon: Icon(Icons.science),
+                                  text: "N"),
+                              Tab(
+                                  icon: Icon(Icons.science),
+                                  text: "P"),
+                              Tab(
+                                  icon: Icon(Icons.science),
+                                  text: "K"),
+                            ],
+                          ),
+                          SizedBox(
+                            height: 250,
+                            child: TabBarView(
+                              children: [
+                                _buildLineChart(
+                                    pHReadings, 0, 14, Colors.green, "pH"),
+                                _buildLineChart(
+                                    nReadings, 0, 100, Colors.blue, "Nitrogen"),
+                                _buildLineChart(
+                                    pReadings, 0, 100, Colors.orange,
+                                    "Phosphorus"),
+                                _buildLineChart(
+                                    kReadings, 0, 100, Colors.purple,
+                                    "Potassium"),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
@@ -187,11 +294,21 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
   }
 
   // Chart builder function
-  Widget _buildLineChart(List<double> data, double minY, double maxY, Color color) {
+  Widget _buildLineChart(
+      List<double> data, double minY, double maxY, Color color, String label) {
     return LineChart(
       LineChartData(
         gridData: const FlGridData(show: true),
-        titlesData: const FlTitlesData(show: false),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(showTitles: true),
+          ),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
         borderData: FlBorderData(
             show: true, border: Border.all(color: Colors.grey, width: 1)),
         minX: 0,
@@ -207,7 +324,8 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
             color: color,
             barWidth: 3,
             dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(show: true, color: color.withOpacity(0.2)),
+            belowBarData:
+                BarAreaData(show: true, color: color.withOpacity(0.2)),
           ),
         ],
       ),
