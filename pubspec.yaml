@@ -20,7 +20,8 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
 
+
 flutter:
-  uses-material-design: 
+  uses-material-design: true
   assets:
     - assets/data_aug24.csv
