@@ -84,7 +84,7 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
 
   Future<void> loadDummyCSV() async {
     try {
-      final csvString = await rootBundle.loadString('assets/dummy_data.csv');
+      final csvString = await rootBundle.loadString('assets/data_aug24.csv');
       final rows = const CsvToListConverter().convert(csvString, eol: "\n");
 
       setState(() {
