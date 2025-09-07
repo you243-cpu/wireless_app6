@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
@@ -7,6 +8,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
 import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
 
 void main() {
   runApp(const SoilSensorApp());
@@ -42,7 +44,7 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
       fetchSensorData();
     });
-    loadDummyCSV();
+    loadDummyCSV(); // keep this for initial load from assets
   }
 
   @override
@@ -88,23 +90,58 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
       final rows = const CsvToListConverter().convert(csvString, eol: "\n");
 
       setState(() {
-        pHReadings.clear();
-        nReadings.clear();
-        pReadings.clear();
-        kReadings.clear();
-        timestamps.clear();
-
-        for (var i = 1; i < rows.length; i++) {
-          final row = rows[i];
-          timestamps.add(DateTime.parse(row[0]));
-          pHReadings.add(row[1].toDouble());
-          nReadings.add(row[2].toDouble());
-          pReadings.add(row[3].toDouble());
-          kReadings.add(row[4].toDouble());
-        }
+        _loadCsvRows(rows);
       });
     } catch (e) {
       print("CSV load error: $e");
+    }
+  }
+
+  // 🔹 Pick CSV file at runtime
+  Future<void> pickCsvFile() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+      );
+
+      if (result != null) {
+        File file = File(result.files.single.path!);
+        final rawData = await file.readAsString();
+
+        List<List<dynamic>> rows =
+            const CsvToListConverter().convert(rawData, eol: '\n');
+
+        setState(() {
+          _loadCsvRows(rows);
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Loaded ${rows.length - 1} rows from CSV")),
+        );
+      }
+    } catch (e) {
+      print("CSV pick error: $e");
+    }
+  }
+
+  // 🔹 Helper: load CSV rows into state
+  void _loadCsvRows(List<List<dynamic>> rows) {
+    pHReadings.clear();
+    nReadings.clear();
+    pReadings.clear();
+    kReadings.clear();
+    timestamps.clear();
+
+    for (var i = 1; i < rows.length; i++) {
+      final row = rows[i];
+      try {
+        timestamps.add(DateTime.parse(row[0]));
+        pHReadings.add(row[1].toDouble());
+        nReadings.add(row[2].toDouble());
+        pReadings.add(row[3].toDouble());
+        kReadings.add(row[4].toDouble());
+      } catch (_) {}
     }
   }
 
@@ -152,6 +189,11 @@ class _SoilSensorAppState extends State<SoilSensorApp> {
         appBar: AppBar(
           title: const Text("🌱 Soil Sensor Dashboard"),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.upload_file),
+              tooltip: "Load CSV",
+              onPressed: pickCsvFile, // 🔹 New button
+            ),
             IconButton(
               icon: Icon(isDarkMode ? Icons.dark_mode : Icons.light_mode),
               onPressed: () => setState(() => isDarkMode = !isDarkMode),
