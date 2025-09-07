@@ -9,8 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-    assets: 
-      - assets/data_aug24.csv
   http: ^1.1.0
   fl_chart: ^0.65.0
   percent_indicator: ^4.2.3
@@ -23,4 +21,6 @@ dev_dependencies:
   flutter_lints: ^5.0.0
 
 flutter:
-  uses-material-design: true
+  uses-material-design: 
+  assets:
+    - assets/data_aug24.csv
