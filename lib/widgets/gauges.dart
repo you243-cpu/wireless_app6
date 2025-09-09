@@ -1,40 +1,50 @@
 import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_gauges/gauges.dart';
+import 'package:percent_indicator/circular_percent_indicator.dart';
 
 class GaugesWidget extends StatelessWidget {
   final double pH;
 
   const GaugesWidget({super.key, required this.pH});
 
+  Color _getpHColor(double pH) {
+    if (pH < 5.5 || pH > 7.5) return Colors.red;
+    return Colors.green;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SfRadialGauge(
-      title: const GaugeTitle(
-        text: "Soil pH",
-        textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-      ),
-      axes: <RadialAxis>[
-        RadialAxis(
-          minimum: 3,
-          maximum: 10,
-          ranges: <GaugeRange>[
-            GaugeRange(startValue: 3, endValue: 5.5, color: Colors.red),
-            GaugeRange(startValue: 5.5, endValue: 7.5, color: Colors.green),
-            GaugeRange(startValue: 7.5, endValue: 10, color: Colors.orange),
-          ],
-          pointers: <GaugePointer>[NeedlePointer(value: pH)],
-          annotations: <GaugeAnnotation>[
-            GaugeAnnotation(
-              widget: Text(
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "Soil pH",
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 20),
+            CircularPercentIndicator(
+              radius: 80,
+              lineWidth: 12,
+              percent: (pH / 14).clamp(0.0, 1.0),
+              center: Text(
                 pH.toStringAsFixed(2),
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              angle: 90,
-              positionFactor: 0.5,
-            )
+              progressColor: _getpHColor(pH),
+              backgroundColor: Colors.grey.shade200,
+              circularStrokeCap: CircularStrokeCap.round,
+              footer: const Padding(
+                padding: EdgeInsets.only(top: 12.0),
+                child: Text("pH Level"),
+              ),
+            ),
           ],
-        )
-      ],
+        ),
+      ),
     );
   }
 }
