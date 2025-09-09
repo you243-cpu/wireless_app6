@@ -5,7 +5,7 @@ import '../services/csv_service.dart';
 import '../widgets/soil_health_card.dart';
 import '../widgets/gauges.dart';
 import '../widgets/nutrient_card.dart';
-import '../widgets/line_chart.dart';
+import '../widgets/line_chart_card.dart';
 import '../widgets/multi_line_chart.dart';
 
 class DashboardScreen extends StatefulWidget {
