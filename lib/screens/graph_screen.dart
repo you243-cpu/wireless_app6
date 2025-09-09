@@ -22,84 +22,145 @@ class GraphScreen extends StatefulWidget {
   State<GraphScreen> createState() => _GraphScreenState();
 }
 
-class _GraphScreenState extends State<GraphScreen> {
-  double zoom = 1.0;
-  double offset = 0.0;
+class _GraphScreenState extends State<GraphScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  // Zoom/Scroll control
+  double zoomLevel = 1.0; // 1 = normal, >1 = zoomed
+  int scrollOffset = 0;   // how far the window is shifted
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 5, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   void _zoomIn() {
-    setState(() => zoom = (zoom * 1.5).clamp(1.0, 10.0));
+    setState(() {
+      zoomLevel = (zoomLevel * 1.5).clamp(1.0, 10.0);
+    });
   }
 
   void _zoomOut() {
-    setState(() => zoom = (zoom / 1.5).clamp(1.0, 10.0));
+    setState(() {
+      zoomLevel = (zoomLevel / 1.5).clamp(1.0, 10.0);
+    });
   }
 
   void _scrollLeft() {
-    setState(() => offset = (offset - 10).clamp(0, widget.timestamps.length.toDouble()));
+    setState(() {
+      scrollOffset = (scrollOffset - 5).clamp(0, widget.timestamps.length);
+    });
   }
 
   void _scrollRight() {
-    setState(() => offset = (offset + 10).clamp(0, widget.timestamps.length.toDouble()));
+    setState(() {
+      scrollOffset =
+          (scrollOffset + 5).clamp(0, widget.timestamps.length);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("📊 Sensor Graphs")),
+      appBar: AppBar(
+        title: const Text("📊 Graphs"),
+        bottom: TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          labelColor: Colors.green,
+          unselectedLabelColor: Colors.grey,
+          tabs: const [
+            Tab(text: "pH"),
+            Tab(text: "N"),
+            Tab(text: "P"),
+            Tab(text: "K"),
+            Tab(text: "All"),
+          ],
+        ),
+      ),
       body: Column(
         children: [
-          // Buttons for zoom + scroll
+          // Zoom/Scroll buttons
           Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Wrap(
-              spacing: 10,
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ElevatedButton(onPressed: _zoomIn, child: const Text("Zoom In")),
-                ElevatedButton(onPressed: _zoomOut, child: const Text("Zoom Out")),
-                ElevatedButton(onPressed: _scrollLeft, child: const Text("← Scroll")),
-                ElevatedButton(onPressed: _scrollRight, child: const Text("Scroll →")),
+                IconButton(
+                  icon: const Icon(Icons.zoom_in),
+                  onPressed: _zoomIn,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.zoom_out),
+                  onPressed: _zoomOut,
+                ),
+                const SizedBox(width: 16),
+                IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: _scrollLeft,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.arrow_forward),
+                  onPressed: _scrollRight,
+                ),
               ],
             ),
           ),
           Expanded(
-            child: DefaultTabController(
-              length: 5,
-              child: Column(
-                children: [
-                  const TabBar(
-                    labelColor: Colors.green,
-                    unselectedLabelColor: Colors.grey,
-                    isScrollable: true,
-                    tabs: [
-                      Tab(text: "pH"),
-                      Tab(text: "N"),
-                      Tab(text: "P"),
-                      Tab(text: "K"),
-                      Tab(text: "All"),
-                    ],
-                  ),
-                  Expanded(
-                    child: TabBarView(
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        LineChartWidget(data: widget.pHReadings, color: Colors.green, label: "pH", timestamps: widget.timestamps, zoom: zoom, offset: offset),
-                        LineChartWidget(data: widget.nReadings, color: Colors.blue, label: "N", timestamps: widget.timestamps, zoom: zoom, offset: offset),
-                        LineChartWidget(data: widget.pReadings, color: Colors.orange, label: "P", timestamps: widget.timestamps, zoom: zoom, offset: offset),
-                        LineChartWidget(data: widget.kReadings, color: Colors.purple, label: "K", timestamps: widget.timestamps, zoom: zoom, offset: offset),
-                        MultiLineChartWidget(
-                          pHData: widget.pHReadings,
-                          nData: widget.nReadings,
-                          pData: widget.pReadings,
-                          kData: widget.kReadings,
-                          timestamps: widget.timestamps,
-                          zoom: zoom,
-                          offset: offset,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            child: TabBarView(
+              controller: _tabController,
+              physics: const NeverScrollableScrollPhysics(), // 🚫 disable swipe
+              children: [
+                LineChartWidget(
+                  data: widget.pHReadings,
+                  color: Colors.green,
+                  label: "pH",
+                  timestamps: widget.timestamps,
+                  zoomLevel: zoomLevel,
+                  scrollOffset: scrollOffset,
+                ),
+                LineChartWidget(
+                  data: widget.nReadings,
+                  color: Colors.blue,
+                  label: "Nitrogen (N)",
+                  timestamps: widget.timestamps,
+                  zoomLevel: zoomLevel,
+                  scrollOffset: scrollOffset,
+                ),
+                LineChartWidget(
+                  data: widget.pReadings,
+                  color: Colors.orange,
+                  label: "Phosphorus (P)",
+                  timestamps: widget.timestamps,
+                  zoomLevel: zoomLevel,
+                  scrollOffset: scrollOffset,
+                ),
+                LineChartWidget(
+                  data: widget.kReadings,
+                  color: Colors.purple,
+                  label: "Potassium (K)",
+                  timestamps: widget.timestamps,
+                  zoomLevel: zoomLevel,
+                  scrollOffset: scrollOffset,
+                ),
+                MultiLineChartWidget(
+                  pHData: widget.pHReadings,
+                  nData: widget.nReadings,
+                  pData: widget.pReadings,
+                  kData: widget.kReadings,
+                  timestamps: widget.timestamps,
+                  zoomLevel: zoomLevel,
+                  scrollOffset: scrollOffset,
+                ),
+              ],
             ),
           ),
         ],
@@ -107,4 +168,3 @@ class _GraphScreenState extends State<GraphScreen> {
     );
   }
 }
-
