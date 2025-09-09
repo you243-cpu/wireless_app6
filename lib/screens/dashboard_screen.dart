@@ -159,6 +159,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     SizedBox(
                       height: 350,
                       child: TabBarView(
+                        physics: const NeverScrollableScrollPhysics(), //Yeah stop the annoying scroll
                         children: [
                           LineChartWidget(data: pHReadings, color: Colors.green, label: "pH", timestamps: timestamps),
                           LineChartWidget(data: nReadings, color: Colors.blue, label: "N", timestamps: timestamps),
