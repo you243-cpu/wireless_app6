@@ -1,48 +1,44 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 
-class LineChartCard extends StatelessWidget {
+class LineChartWidget extends StatelessWidget {
   final List<double> data;
-  final List<String> timestamps;
+  final List<DateTime> timestamps;
   final String label;
   final Color color;
 
-  const LineChartCard({
-    Key? key,
+  const LineChartWidget({
+    super.key,
     required this.data,
     required this.timestamps,
     required this.label,
     required this.color,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 3,
       margin: const EdgeInsets.all(12),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Text(label, style: Theme.of(context).textTheme.titleLarge),
+            Text(label, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             SizedBox(
               height: 200,
               child: LineChart(
                 LineChartData(
-                  titlesData: FlTitlesData(show: false),
-                  gridData: FlGridData(show: true),
-                  borderData: FlBorderData(show: true),
+                  titlesData: FlTitlesData(show: true),
                   lineBarsData: [
                     LineChartBarData(
-                      spots: List.generate(
-                        data.length,
-                        (i) => FlSpot(i.toDouble(), data[i]),
-                      ),
+                      spots: data.asMap().entries.map((e) {
+                        return FlSpot(e.key.toDouble(), e.value);
+                      }).toList(),
                       isCurved: true,
                       color: color,
+                      barWidth: 3,
                       dotData: FlDotData(show: false),
-                      belowBarData: BarAreaData(show: false),
                     ),
                   ],
                 ),
