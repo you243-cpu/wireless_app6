@@ -9,11 +9,9 @@ workflows:
         KEY_ALIAS: my-key-alias
         KEYSTORE_FILE: $CM_BUILD_DIR/android/my-release-key.jks
     scripts:
-      # 1️⃣ Install dependencies
       - name: Get Flutter packages
         script: flutter pub get
 
-      # 2️⃣ Prepare key.properties for signing
       - name: Generate key.properties
         script: |
           echo "storePassword=$KEYSTORE_PASSWORD" > android/key.properties
@@ -21,16 +19,12 @@ workflows:
           echo "keyAlias=$KEY_ALIAS" >> android/key.properties
           echo "storeFile=$KEYSTORE_FILE" >> android/key.properties
 
-      # 3️⃣ Build release APK
-      - name: Build release APK
+      - name: Build universal APK
         script: flutter build apk --release --no-shrink
 
-      # 4️⃣ Build release AAB (optional for Play Store)
       - name: Build release AAB
         script: flutter build appbundle --release --no-shrink
 
     artifacts:
-      # APK for direct installation
-      - build/app/outputs/flutter-apk/app-release.apk
-      # AAB for Play Store
+      - build/app/outputs/flutter-apk/*.apk
       - build/app/outputs/bundle/release/app-release.aab
