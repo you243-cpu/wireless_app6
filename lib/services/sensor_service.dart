@@ -1,32 +1,17 @@
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:csv/csv.dart';
+class SensorService {
+  static double calculateSoilHealth({
+    required double pH,
+    required double n,
+    required double p,
+    required double k,
+  }) {
+    double score = 0;
 
-class CSVService {
-  static Future<Map<String, dynamic>> loadCSV(String path) async {
-    final raw = await rootBundle.loadString(path);
-    List<List<dynamic>> rows = const CsvToListConverter().convert(raw);
+    if (pH >= 6.0 && pH <= 7.5) score += 25;
+    if (n > 10) score += 25;
+    if (p > 5) score += 25;
+    if (k > 5) score += 25;
 
-    List<double> pH = [];
-    List<double> N = [];
-    List<double> P = [];
-    List<double> K = [];
-    List<DateTime> timestamps = [];
-
-    for (int i = 1; i < rows.length; i++) {
-      final row = rows[i];
-      timestamps.add(DateTime.tryParse(row[0].toString()) ?? DateTime.now());
-      pH.add((row[1] as num).toDouble());
-      N.add((row[2] as num).toDouble());
-      P.add((row[3] as num).toDouble());
-      K.add((row[4] as num).toDouble());
-    }
-
-    return {
-      'timestamps': timestamps,
-      'pH': pH,
-      'N': N,
-      'P': P,
-      'K': K,
-    };
+    return score;
   }
 }
