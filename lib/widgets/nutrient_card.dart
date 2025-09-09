@@ -1,33 +1,48 @@
 import 'package:flutter/material.dart';
 
 class NutrientCard extends StatelessWidget {
-  final int N, P, K;
-  const NutrientCard({super.key, required this.N, required this.P, required this.K});
+  final double N;
+  final double P;
+  final double K;
+
+  const NutrientCard({
+    Key? key,
+    required this.N,
+    required this.P,
+    required this.K,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Card(
       elevation: 3,
-      child: Column(
+      margin: const EdgeInsets.all(12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text("Nutrient Levels",
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            _buildRow("Nitrogen (N)", N, Colors.blue),
+            _buildRow("Phosphorus (P)", P, Colors.orange),
+            _buildRow("Potassium (K)", K, Colors.purple),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(String name, double value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          ListTile(
-            leading: const Icon(Icons.science, color: Colors.blue),
-            title: const Text("Nitrogen (N)"),
-            trailing: Text("$N mg/kg"),
-          ),
-          ListTile(
-            leading: const Icon(Icons.science, color: Colors.orange),
-            title: const Text("Phosphorus (P)"),
-            trailing: Text("$P mg/kg"),
-          ),
-          ListTile(
-            leading: const Icon(Icons.science, color: Colors.purple),
-            title: const Text("Potassium (K)"),
-            trailing: Text("$K mg/kg"),
-          ),
+          Text(name),
+          Text(value.toStringAsFixed(2), style: TextStyle(color: color)),
         ],
       ),
     );
   }
 }
-
