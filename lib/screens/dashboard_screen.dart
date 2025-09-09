@@ -1,19 +1,18 @@
-// lib/screens/dashboard_screen.dart
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:csv/csv.dart';
 
-import '../services/csv_service.dart';
+// Import widgets
 import 'package:wireless_appf/widgets/line_chart_card.dart';
 import 'package:wireless_appf/widgets/multi_line_chart.dart';
 import 'package:wireless_appf/widgets/soil_health_card.dart';
 import 'package:wireless_appf/widgets/gauges.dart';
 import 'package:wireless_appf/widgets/nutrient_card.dart';
-
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -43,7 +42,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
       fetchSensorData();
     });
-    loadDummyCSV(); // initial dummy data from assets
   }
 
   @override
@@ -52,6 +50,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
+  // 🔹 Fetch from ESP8266
   Future<void> fetchSensorData() async {
     try {
       final response = await http.get(Uri.parse("http://$espIP/"));
@@ -83,22 +82,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> loadDummyCSV() async {
-    try {
-      final rows = await CsvService.loadFromAssets('assets/data_aug24.csv');
-      final parsed = CsvService.parseRows(rows);
-      setState(() {
-        timestamps = parsed["timestamps"]!.cast<DateTime>();
-        pHReadings = parsed["pH"]!.cast<double>();
-        nReadings = parsed["N"]!.cast<double>();
-        pReadings = parsed["P"]!.cast<double>();
-        kReadings = parsed["K"]!.cast<double>();
-      });
-    } catch (e) {
-      debugPrint("CSV load error: $e");
-    }
-  }
-
+  // 🔹 Pick CSV file
   Future<void> pickCsvFile() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -108,15 +92,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       if (result != null) {
         File file = File(result.files.single.path!);
-        final rows = await CsvService.loadFromFile(file);
-        final parsed = CsvService.parseRows(rows);
+        final rawData = await file.readAsString();
+
+        List<List<dynamic>> rows =
+            const CsvToListConverter().convert(rawData, eol: '\n');
 
         setState(() {
-          timestamps = parsed["timestamps"]!.cast<DateTime>();
-          pHReadings = parsed["pH"]!.cast<double>();
-          nReadings = parsed["N"]!.cast<double>();
-          pReadings = parsed["P"]!.cast<double>();
-          kReadings = parsed["K"]!.cast<double>();
+          _loadCsvRows(rows);
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -128,21 +110,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  String getAlertMessage() {
-    if (pH < 5.5) return "⚠️ Soil too acidic. Add lime.";
-    if (pH > 7.5) return "⚠️ Soil too alkaline. Add sulfur.";
-    return "✅ Soil conditions look healthy!";
-  }
+  // 🔹 Helper: load CSV rows into state
+  void _loadCsvRows(List<List<dynamic>> rows) {
+    pHReadings.clear();
+    nReadings.clear();
+    pReadings.clear();
+    kReadings.clear();
+    timestamps.clear();
 
-  Color getpHColor() {
-    if (pH < 5.5 || pH > 7.5) return Colors.red;
-    return Colors.green;
-  }
-
-  String _formatTimestamp(int index) {
-    if (index < 0 || index >= timestamps.length) return "";
-    final dt = timestamps[index];
-    return DateFormat("MM-dd HH:mm").format(dt);
+    for (var i = 1; i < rows.length; i++) {
+      final row = rows[i];
+      try {
+        timestamps.add(DateTime.parse(row[0]));
+        pHReadings.add(row[1].toDouble());
+        nReadings.add(row[2].toDouble());
+        pReadings.add(row[3].toDouble());
+        kReadings.add(row[4].toDouble());
+      } catch (_) {}
+    }
   }
 
   @override
@@ -168,26 +153,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      Text("Overall Soil Health",
-                          style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 10),
-                      Text(getAlertMessage(),
-                          style: TextStyle(fontSize: 16, color: getpHColor())),
-                    ],
-                  ),
-                ),
-              ),
+              SoilHealthCard(pH: pH),
+              const SizedBox(height: 20),
+              GaugesWidget(pH: pH),
+              const SizedBox(height: 20),
+              NutrientCard(N: N, P: P, K: K),
               const SizedBox(height: 20),
 
-              // Charts
+              // Graphs
               DefaultTabController(
                 length: 5,
                 child: Column(
@@ -197,11 +170,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       unselectedLabelColor: Colors.grey,
                       isScrollable: true,
                       tabs: [
-                        Tab(icon: Icon(Icons.bubble_chart), text: "pH"),
-                        Tab(icon: Icon(Icons.science), text: "N"),
-                        Tab(icon: Icon(Icons.science), text: "P"),
-                        Tab(icon: Icon(Icons.science), text: "K"),
-                        Tab(icon: Icon(Icons.dashboard), text: "All"),
+                        Tab(text: "pH"),
+                        Tab(text: "N"),
+                        Tab(text: "P"),
+                        Tab(text: "K"),
+                        Tab(text: "All"),
                       ],
                     ),
                     SizedBox(
