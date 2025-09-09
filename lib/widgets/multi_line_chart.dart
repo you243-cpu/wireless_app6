@@ -2,43 +2,43 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 class MultiLineChartWidget extends StatelessWidget {
-  final List<double> pHReadings;
-  final List<double> nReadings;
-  final List<double> pReadings;
-  final List<double> kReadings;
-  final List<DateTime> timestamps;
+  final List<double> pHData;
+  final List<double> nData;
+  final List<double> pData;
+  final List<double> kData;
 
   const MultiLineChartWidget({
     super.key,
-    required this.pHReadings,
-    required this.nReadings,
-    required this.pReadings,
-    required this.kReadings,
-    required this.timestamps,
+    required this.pHData,
+    required this.nData,
+    required this.pData,
+    required this.kData,
   });
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(vertical: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            const Text("All Parameters",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text("All Parameters",
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             SizedBox(
               height: 250,
               child: LineChart(
                 LineChartData(
-                  titlesData: FlTitlesData(show: true),
                   lineBarsData: [
-                    _makeLine(pHReadings, Colors.green),
-                    _makeLine(nReadings, Colors.blue),
-                    _makeLine(pReadings, Colors.orange),
-                    _makeLine(kReadings, Colors.purple),
+                    _buildLine(pHData, Colors.green),
+                    _buildLine(nData, Colors.blue),
+                    _buildLine(pData, Colors.orange),
+                    _buildLine(kData, Colors.purple),
                   ],
+                  gridData: FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(show: false),
                 ),
               ),
             ),
@@ -48,7 +48,7 @@ class MultiLineChartWidget extends StatelessWidget {
     );
   }
 
-  LineChartBarData _makeLine(List<double> data, Color color) {
+  LineChartBarData _buildLine(List<double> data, Color color) {
     return LineChartBarData(
       spots: data.asMap().entries.map((e) {
         return FlSpot(e.key.toDouble(), e.value);
