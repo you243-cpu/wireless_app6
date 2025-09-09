@@ -1,53 +1,53 @@
-import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class LineChartWidget extends StatelessWidget {
   final List<double> data;
   final List<DateTime> timestamps;
-  final String label;
   final Color color;
+  final String label;
 
   const LineChartWidget({
     super.key,
     required this.data,
     required this.timestamps,
-    required this.label,
     required this.color,
+    required this.label,
   });
 
   @override
   Widget build(BuildContext context) {
     return LineChart(
       LineChartData(
-        minY: (data.isEmpty ? 0 : (data.reduce((a, b) => a < b ? a : b))) - 1,
-        maxY: (data.isEmpty ? 10 : (data.reduce((a, b) => a > b ? a : b))) + 1,
+        lineTouchData: LineTouchData(enabled: true), // 👆 zoom/scroll
         titlesData: FlTitlesData(
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(showTitles: true, reservedSize: 40),
-          ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: (timestamps.isEmpty ? 1 : (timestamps.length ~/ 5).toDouble()).clamp(1, 10).toDouble(),
+              interval: (timestamps.length / 6).floorToDouble(), // 📌 ~6-7 labels
               getTitlesWidget: (value, meta) {
                 int index = value.toInt();
-                if (index < 0 || index >= timestamps.length) return const SizedBox.shrink();
-                return Text(DateFormat("HH:mm").format(timestamps[index]), style: const TextStyle(fontSize: 10));
+                if (index < 0 || index >= timestamps.length) return const SizedBox();
+                String formatted = DateFormat("MM-dd").format(timestamps[index]);
+                return Text(formatted, style: const TextStyle(fontSize: 10));
               },
             ),
           ),
         ),
-        gridData: FlGridData(show: true),
-        borderData: FlBorderData(show: true),
+        minX: 0,
+        maxX: data.length.toDouble() - 1,
         lineBarsData: [
           LineChartBarData(
-            spots: List.generate(data.length, (i) => FlSpot(i.toDouble(), data[i])),
+            spots: List.generate(
+              data.length,
+              (i) => FlSpot(i.toDouble(), data[i]),
+            ),
             isCurved: true,
             color: color,
             barWidth: 2,
-            belowBarData: BarAreaData(show: true, color: color.withOpacity(0.2)),
-          ),
+            dotData: FlDotData(show: false),
+          )
         ],
       ),
     );
