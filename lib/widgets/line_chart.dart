@@ -3,33 +3,31 @@ import 'package:fl_chart/fl_chart.dart';
 
 class LineChartWidget extends StatelessWidget {
   final List<double> data;
-  final List<DateTime> timestamps;
-  final String label;
+  final String title;
   final Color color;
 
   const LineChartWidget({
     super.key,
     required this.data,
-    required this.timestamps,
-    required this.label,
+    required this.title,
     required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(vertical: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Text(label, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(title,
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             SizedBox(
               height: 200,
               child: LineChart(
                 LineChartData(
-                  titlesData: FlTitlesData(show: true),
                   lineBarsData: [
                     LineChartBarData(
                       spots: data.asMap().entries.map((e) {
@@ -41,6 +39,9 @@ class LineChartWidget extends StatelessWidget {
                       dotData: FlDotData(show: false),
                     ),
                   ],
+                  gridData: FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(show: false),
                 ),
               ),
             ),
