@@ -23,18 +23,18 @@ class GraphScreen extends StatefulWidget {
 }
 
 class _GraphScreenState extends State<GraphScreen> {
-  int zoomLevel = 1; // 1 = full view
+  double zoomLevel = 1; // 1 = full view
   int scrollIndex = 0;
 
   void zoomIn() {
     setState(() {
-      if (zoomLevel < 5) zoomLevel++;
+      if (zoomLevel < 5) zoomLevel += 1.0;
     });
   }
 
   void zoomOut() {
     setState(() {
-      if (zoomLevel > 1) zoomLevel--;
+      if (zoomLevel > 1) zoomLevel -= 1.0;
     });
   }
 
