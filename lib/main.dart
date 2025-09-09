@@ -2,20 +2,17 @@ import 'package:flutter/material.dart';
 import 'screens/dashboard_screen.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const SoilSensorApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class SoilSensorApp extends StatelessWidget {
+  const SoilSensorApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Wireless Soil Health App',
-      theme: ThemeData.light(useMaterial3: true),
-      darkTheme: ThemeData.dark(useMaterial3: true),
-      themeMode: ThemeMode.system,
-      home: const DashboardScreen(),
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: DashboardScreen(),
     );
   }
 }
