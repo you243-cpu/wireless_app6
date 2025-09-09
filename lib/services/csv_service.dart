@@ -1,62 +1,47 @@
+// lib/services/csv_service.dart
 import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter/material.dart';
 import 'package:csv/csv.dart';
-import 'package:file_picker/file_picker.dart';
 
 class CsvService {
-  static Future<List<List<dynamic>>> loadDummyCSV() async {
-    try {
-      final csvString = await rootBundle.loadString('assets/data_aug24.csv');
-      return const CsvToListConverter().convert(csvString, eol: "\n");
-    } catch (e) {
-      print("CSV load error: $e");
-      return [];
-    }
+  // Load CSV from assets
+  static Future<List<List<dynamic>>> loadFromAssets(String path) async {
+    final csvString = await rootBundle.loadString(path);
+    return const CsvToListConverter().convert(csvString, eol: "\n");
   }
 
-  static Future<void> pickCsvFile(BuildContext context, State state) async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['csv'],
-      );
-
-      if (result != null) {
-        File file = File(result.files.single.path!);
-        final rawData = await file.readAsString();
-        final rows = const CsvToListConverter().convert(rawData, eol: '\n');
-
-        state.setState(() {
-          loadCsvRows(rows, state);
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Loaded ${rows.length - 1} rows from CSV")),
-        );
-      }
-    } catch (e) {
-      print("CSV pick error: $e");
-    }
+  // Load CSV from a file
+  static Future<List<List<dynamic>>> loadFromFile(File file) async {
+    final rawData = await file.readAsString();
+    return const CsvToListConverter().convert(rawData, eol: "\n");
   }
 
-  static void loadCsvRows(List<List<dynamic>> rows, State state) {
-    if (rows.isEmpty) return;
+  // Parse CSV rows into sensor data
+  static Map<String, List<dynamic>> parseRows(List<List<dynamic>> rows) {
+    List<double> pHReadings = [];
+    List<double> nReadings = [];
+    List<double> pReadings = [];
+    List<double> kReadings = [];
+    List<DateTime> timestamps = [];
 
-    state.setState(() {
+    for (var i = 1; i < rows.length; i++) {
       try {
-        for (var i = 1; i < rows.length; i++) {
-          final row = rows[i];
-          (state as dynamic).timestamps.add(DateTime.parse(row[0]));
-          (state).pHReadings.add(row[1].toDouble());
-          (state).nReadings.add(row[2].toDouble());
-          (state).pReadings.add(row[3].toDouble());
-          (state).kReadings.add(row[4].toDouble());
-        }
-      } catch (e) {
-        print("Row parse error: $e");
+        timestamps.add(DateTime.parse(rows[i][0]));
+        pHReadings.add(rows[i][1].toDouble());
+        nReadings.add(rows[i][2].toDouble());
+        pReadings.add(rows[i][3].toDouble());
+        kReadings.add(rows[i][4].toDouble());
+      } catch (_) {
+        // Ignore malformed rows
       }
-    });
+    }
+
+    return {
+      "timestamps": timestamps,
+      "pH": pHReadings,
+      "N": nReadings,
+      "P": pReadings,
+      "K": kReadings,
+    };
   }
 }
-
