@@ -1,51 +1,32 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:csv/csv.dart';
 
-class SensorData {
-  final double pH;
-  final int N, P, K;
-  final List<double> pHReadings, nReadings, pReadings, kReadings;
-  final List<DateTime> timestamps;
+class CSVService {
+  static Future<Map<String, dynamic>> loadCSV(String path) async {
+    final raw = await rootBundle.loadString(path);
+    List<List<dynamic>> rows = const CsvToListConverter().convert(raw);
 
-  SensorData({
-    required this.pH,
-    required this.N,
-    required this.P,
-    required this.K,
-    required this.pHReadings,
-    required this.nReadings,
-    required this.pReadings,
-    required this.kReadings,
-    required this.timestamps,
-  });
-}
+    List<double> pH = [];
+    List<double> N = [];
+    List<double> P = [];
+    List<double> K = [];
+    List<DateTime> timestamps = [];
 
-class SensorService {
-  static const String espIP = "192.168.4.1"; // ESP8266 IP
-
-  static Future<void> fetchSensorData({required Function(SensorData) onData}) async {
-    try {
-      final response = await http.get(Uri.parse("http://$espIP/"));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final now = DateTime.now();
-
-        final sensorData = SensorData(
-          pH: (data["pH"] as num).toDouble(),
-          N: data["N"],
-          P: data["P"],
-          K: data["K"],
-          pHReadings: [(data["pH"] as num).toDouble()],
-          nReadings: [(data["N"] as num).toDouble()],
-          pReadings: [(data["P"] as num).toDouble()],
-          kReadings: [(data["K"] as num).toDouble()],
-          timestamps: [now],
-        );
-
-        onData(sensorData);
-      }
-    } catch (e) {
-      print("Fetch error: $e");
+    for (int i = 1; i < rows.length; i++) {
+      final row = rows[i];
+      timestamps.add(DateTime.tryParse(row[0].toString()) ?? DateTime.now());
+      pH.add((row[1] as num).toDouble());
+      N.add((row[2] as num).toDouble());
+      P.add((row[3] as num).toDouble());
+      K.add((row[4] as num).toDouble());
     }
+
+    return {
+      'timestamps': timestamps,
+      'pH': pH,
+      'N': N,
+      'P': P,
+      'K': K,
+    };
   }
 }
