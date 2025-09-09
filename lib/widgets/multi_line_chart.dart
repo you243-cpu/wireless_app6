@@ -77,4 +77,41 @@ class MultiLineChart extends StatelessWidget {
               lineBarsData: [
                 _makeLine(pHReadings, Colors.green),
                 _makeLine(nReadings, Colors.blue),
-                _makeLine(pRead
+                _makeLine(pReadings, Colors.orange),
+                _makeLine(kReadings, Colors.purple),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 20,
+          children: const [
+            Legend(color: Colors.green, text: "pH"),
+            Legend(color: Colors.blue, text: "N"),
+            Legend(color: Colors.orange, text: "P"),
+            Legend(color: Colors.purple, text: "K"),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class Legend extends StatelessWidget {
+  final Color color;
+  final String text;
+  const Legend({super.key, required this.color, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 15, height: 15, color: color),
+        const SizedBox(width: 5),
+        Text(text),
+      ],
+    );
+  }
+}
