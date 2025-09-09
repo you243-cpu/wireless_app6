@@ -8,8 +8,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../services/csv_service.dart';
-import '../widgets/line_chart_card.dart';
-import '../widgets/multi_line_chart.dart';
+import 'package:wireless_appf/widgets/line_chart_card.dart';
+import 'package:wireless_appf/widgets/multi_line_chart.dart';
+import 'package:wireless_appf/widgets/soil_health_card.dart';
+import 'package:wireless_appf/widgets/gauges.dart';
+import 'package:wireless_appf/widgets/nutrient_card.dart';
+
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
