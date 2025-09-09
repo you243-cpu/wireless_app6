@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
-import '../widgets/soil_health_card.dart';
-import '../widgets/gauges.dart';
-import '../widgets/nutrient_card.dart';
-import '../widgets/line_chart.dart';
-import '../widgets/multi_line_chart.dart';
-import '../services/csv_service.dart';
-import '../services/sensor_service.dart';
-import '../services/alert_service.dart';
+import 'package:wireless_appf/widgets/soil_health_card.dart';
+import 'package:wireless_appf/widgets/gauges.dart';
+import 'package:wireless_appf/widgets/nutrient_card.dart';
+import 'package:wireless_appf/widgets/line_chart.dart';
+import 'package:wireless_appf/widgets/multi_line_chart.dart';
+
+// Import services with aliases to avoid conflicts
+import 'package:wireless_appf/services/csv_service.dart' as csv;
+import 'package:wireless_appf/services/sensor_service.dart' as sensor;
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  _DashboardScreenState createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
@@ -20,107 +21,94 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<double> nReadings = [];
   List<double> pReadings = [];
   List<double> kReadings = [];
-  List<DateTime> timestamps = [];
-
   double soilHealthScore = 0;
-  double moisture = 0;
-  double temperature = 0;
-  double N = 0, P = 0, K = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadCSVData();
+    _loadData();
   }
 
-  Future<void> _loadCSVData() async {
-    final result = await CSVService.loadCSV('assets/data_aug24.csv');
+  Future<void> _loadData() async {
+    final result = await csv.CSVService.loadCSV('assets/data_aug24.csv');
+
     setState(() {
-      pHReadings = result['pH'] ?? [];
-      nReadings = result['N'] ?? [];
-      pReadings = result['P'] ?? [];
-      kReadings = result['K'] ?? [];
-      timestamps = result['timestamps']?.cast<DateTime>() ?? [];
+      // Cast to List<double> safely
+      pHReadings = (result['pH'] ?? []).map<double>((e) => e.toDouble()).toList();
+      nReadings = (result['N'] ?? []).map<double>((e) => e.toDouble()).toList();
+      pReadings = (result['P'] ?? []).map<double>((e) => e.toDouble()).toList();
+      kReadings = (result['K'] ?? []).map<double>((e) => e.toDouble()).toList();
+
+      if (pHReadings.isNotEmpty &&
+          nReadings.isNotEmpty &&
+          pReadings.isNotEmpty &&
+          kReadings.isNotEmpty) {
+        soilHealthScore = sensor.SensorService.calculateSoilHealth(
+          pH: pHReadings.last,
+          n: nReadings.last,
+          p: pReadings.last,
+          k: kReadings.last,
+        );
+      }
     });
-
-    // Update metrics
-    if (pHReadings.isNotEmpty) {
-      soilHealthScore = SensorService.calculateSoilHealth(
-        pH: pHReadings.last,
-        n: nReadings.last,
-        p: pReadings.last,
-        k: kReadings.last,
-      );
-
-      N = nReadings.last;
-      P = pReadings.last;
-      K = kReadings.last;
-
-      // Example static gauges
-      moisture = 65;
-      temperature = 28;
-
-      AlertService.checkAlerts(
-        context,
-        pH: pHReadings.last,
-        soilHealth: soilHealthScore,
-      );
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Soil Health Dashboard"),
+        title: const Text("Soil Dashboard"),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SoilHealthCard(score: soilHealthScore),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                GaugeWidget(value: moisture, label: "Moisture", unit: "%"),
-                GaugeWidget(value: temperature, label: "Temp", unit: "°C"),
-              ],
+            const SizedBox(height: 16),
+
+            NutrientCard(
+              N: nReadings.isNotEmpty ? nReadings.last : 0,
+              P: pReadings.isNotEmpty ? pReadings.last : 0,
+              K: kReadings.isNotEmpty ? kReadings.last : 0,
             ),
-            const SizedBox(height: 12),
-            NutrientCard(N: N, P: P, K: K),
-            const SizedBox(height: 12),
-            LineChartWidget(
-              data: pHReadings,
-              timestamps: timestamps,
-              label: "pH",
-              color: Colors.green,
-            ),
-            LineChartWidget(
-              data: nReadings,
-              timestamps: timestamps,
-              label: "Nitrogen (N)",
-              color: Colors.blue,
-            ),
-            LineChartWidget(
-              data: pReadings,
-              timestamps: timestamps,
-              label: "Phosphorus (P)",
-              color: Colors.orange,
-            ),
-            LineChartWidget(
-              data: kReadings,
-              timestamps: timestamps,
-              label: "Potassium (K)",
-              color: Colors.purple,
-            ),
-            MultiLineChartWidget(
-              pHReadings: pHReadings,
-              nReadings: nReadings,
-              pReadings: pReadings,
-              kReadings: kReadings,
-              timestamps: timestamps,
-            ),
+            const SizedBox(height: 16),
+
+            if (pHReadings.isNotEmpty)
+              LineChartWidget(
+                data: pHReadings,
+                title: "pH Levels",
+                color: Colors.green,
+              ),
+            if (nReadings.isNotEmpty)
+              LineChartWidget(
+                data: nReadings,
+                title: "Nitrogen (N)",
+                color: Colors.blue,
+              ),
+            if (pReadings.isNotEmpty)
+              LineChartWidget(
+                data: pReadings,
+                title: "Phosphorus (P)",
+                color: Colors.orange,
+              ),
+            if (kReadings.isNotEmpty)
+              LineChartWidget(
+                data: kReadings,
+                title: "Potassium (K)",
+                color: Colors.purple,
+              ),
+
+            if (pHReadings.isNotEmpty &&
+                nReadings.isNotEmpty &&
+                pReadings.isNotEmpty &&
+                kReadings.isNotEmpty)
+              MultiLineChartWidget(
+                pHData: pHReadings,
+                nData: nReadings,
+                pData: pReadings,
+                kData: kReadings,
+              ),
           ],
         ),
       ),
