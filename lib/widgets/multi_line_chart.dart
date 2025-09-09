@@ -9,7 +9,7 @@ class MultiLineChartWidget extends StatelessWidget {
   final List<DateTime> timestamps;
 
   final double zoomLevel;
-  final int scrollOffset;
+  final int scrollIndex;
 
   const MultiLineChartWidget({
     super.key,
@@ -19,7 +19,7 @@ class MultiLineChartWidget extends StatelessWidget {
     required this.kData,
     required this.timestamps,
     this.zoomLevel = 1.0,
-    this.scrollOffset = 0,
+    this.scrollIndex = 0,
   });
 
   @override
@@ -28,8 +28,9 @@ class MultiLineChartWidget extends StatelessWidget {
       return const Center(child: Text("No data"));
     }
 
+    // Make sure at least 6 points are visible
     int visibleCount = (timestamps.length ~/ zoomLevel).clamp(6, timestamps.length);
-    int start = scrollOffset.clamp(0, (timestamps.length - visibleCount).clamp(0, timestamps.length));
+    int start = scrollIndex.clamp(0, (timestamps.length - visibleCount).clamp(0, timestamps.length));
     int end = (start + visibleCount).clamp(0, timestamps.length);
 
     final shownTimestamps = timestamps.sublist(start, end);
@@ -45,6 +46,7 @@ class MultiLineChartWidget extends StatelessWidget {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      // Show ~6–7 dates maximum
                       interval: (shownTimestamps.length / 6).floorToDouble().clamp(1, shownTimestamps.length.toDouble()),
                       getTitlesWidget: (value, meta) {
                         int index = value.toInt();
