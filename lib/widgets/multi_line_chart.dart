@@ -44,7 +44,7 @@ class MultiLineChartWidget extends StatelessWidget {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: (timestamps.isEmpty ? 1 : (timestamps.length ~/ 5).toDouble()).clamp(1, 10),
+              interval: (timestamps.isEmpty ? 1 : (timestamps.length ~/ 5).toDouble()).clamp(1, 10).toDouble(),
               getTitlesWidget: (value, meta) {
                 int index = value.toInt();
                 if (index < 0 || index >= timestamps.length) return const SizedBox.shrink();
