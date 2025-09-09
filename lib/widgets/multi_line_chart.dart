@@ -1,12 +1,15 @@
-import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
 
-class MultiLineChartWidget extends StatefulWidget {
+class MultiLineChartWidget extends StatelessWidget {
   final List<double> pHData;
   final List<double> nData;
   final List<double> pData;
   final List<double> kData;
   final List<DateTime> timestamps;
+
+  final double zoomLevel;
+  final int scrollOffset;
 
   const MultiLineChartWidget({
     super.key,
@@ -15,162 +18,97 @@ class MultiLineChartWidget extends StatefulWidget {
     required this.pData,
     required this.kData,
     required this.timestamps,
+    this.zoomLevel = 1.0,
+    this.scrollOffset = 0,
   });
 
   @override
-  State<MultiLineChartWidget> createState() => _MultiLineChartWidgetState();
-}
-
-class _MultiLineChartWidgetState extends State<MultiLineChartWidget> {
-  double _minX = 0;
-  double _maxX = 20;
-
-  void _zoomIn() {
-    setState(() {
-      final range = (_maxX - _minX) * 0.8;
-      _maxX = _minX + range;
-    });
-  }
-
-  void _zoomOut() {
-    setState(() {
-      final range = (_maxX - _minX) / 0.8;
-      _maxX = _minX + range;
-      if (_maxX > widget.timestamps.length.toDouble()) {
-        _maxX = widget.timestamps.length.toDouble();
-      }
-    });
-  }
-
-  void _scrollLeft() {
-    setState(() {
-      final shift = (_maxX - _minX) * 0.2;
-      _minX = (_minX - shift).clamp(0, widget.timestamps.length.toDouble());
-      _maxX = (_maxX - shift).clamp(0, widget.timestamps.length.toDouble());
-    });
-  }
-
-  void _scrollRight() {
-    setState(() {
-      final shift = (_maxX - _minX) * 0.2;
-      _minX = (_minX + shift).clamp(0, widget.timestamps.length.toDouble());
-      _maxX = (_maxX + shift).clamp(0, widget.timestamps.length.toDouble());
-    });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.timestamps.isNotEmpty) {
-      _maxX = widget.timestamps.length.toDouble().clamp(0, 20);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    if (timestamps.isEmpty) {
+      return const Center(child: Text("No data"));
+    }
+
+    int visibleCount = (timestamps.length ~/ zoomLevel).clamp(6, timestamps.length);
+    int start = scrollOffset.clamp(0, (timestamps.length - visibleCount).clamp(0, timestamps.length));
+    int end = (start + visibleCount).clamp(0, timestamps.length);
+
+    final shownTimestamps = timestamps.sublist(start, end);
+
     return Column(
       children: [
-        // 📌 Legend
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildLegendItem(Colors.green, "pH"),
-              const SizedBox(width: 16),
-              _buildLegendItem(Colors.blue, "N"),
-              const SizedBox(width: 16),
-              _buildLegendItem(Colors.orange, "P"),
-              const SizedBox(width: 16),
-              _buildLegendItem(Colors.purple, "K"),
-            ],
-          ),
-        ),
-
-        // 📈 Chart
-        SizedBox(
-          height: 300,
-          child: LineChart(
-            LineChartData(
-              minX: _minX,
-              maxX: _maxX,
-              minY: 0,
-              maxY: [
-                ...widget.pHData,
-                ...widget.nData,
-                ...widget.pData,
-                ...widget.kData,
-              ].reduce((a, b) => a > b ? a : b),
-              titlesData: FlTitlesData(
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 40,
-                    interval: ((_maxX - _minX) / 6).clamp(1, double.infinity),
-                    getTitlesWidget: (value, meta) {
-                      final index = value.toInt();
-                      if (index < 0 || index >= widget.timestamps.length) {
-                        return const SizedBox.shrink();
-                      }
-                      final time = widget.timestamps[index];
-                      return Text(
-                        "${time.month}/${time.day}\n${time.hour}:${time.minute.toString().padLeft(2, '0')}",
-                        style: const TextStyle(fontSize: 10),
-                      );
-                    },
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: LineChart(
+              LineChartData(
+                titlesData: FlTitlesData(
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: (shownTimestamps.length / 6).floorToDouble().clamp(1, shownTimestamps.length.toDouble()),
+                      getTitlesWidget: (value, meta) {
+                        int index = value.toInt();
+                        if (index < 0 || index >= shownTimestamps.length) return const SizedBox.shrink();
+                        return Text(
+                          "${shownTimestamps[index].month}/${shownTimestamps[index].day}",
+                          style: const TextStyle(fontSize: 10),
+                        );
+                      },
+                    ),
                   ),
                 ),
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(showTitles: true, reservedSize: 40),
-                ),
-                topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                lineBarsData: [
+                  _buildLine(pHData.sublist(start, end), Colors.green),
+                  _buildLine(nData.sublist(start, end), Colors.blue),
+                  _buildLine(pData.sublist(start, end), Colors.orange),
+                  _buildLine(kData.sublist(start, end), Colors.purple),
+                ],
               ),
-              lineBarsData: [
-                _buildLine(widget.pHData, Colors.green),
-                _buildLine(widget.nData, Colors.blue),
-                _buildLine(widget.pData, Colors.orange),
-                _buildLine(widget.kData, Colors.purple),
-              ],
-              gridData: FlGridData(show: true),
-              borderData: FlBorderData(show: true),
             ),
           ),
         ),
-
-        // 🔍 Zoom & Scroll Controls
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(icon: const Icon(Icons.zoom_in), onPressed: _zoomIn),
-            IconButton(icon: const Icon(Icons.zoom_out), onPressed: _zoomOut),
-            IconButton(icon: const Icon(Icons.arrow_back), onPressed: _scrollLeft),
-            IconButton(icon: const Icon(Icons.arrow_forward), onPressed: _scrollRight),
-          ],
+        // Legend
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Wrap(
+            spacing: 12,
+            children: const [
+              _LegendItem(color: Colors.green, label: "pH"),
+              _LegendItem(color: Colors.blue, label: "Nitrogen"),
+              _LegendItem(color: Colors.orange, label: "Phosphorus"),
+              _LegendItem(color: Colors.purple, label: "Potassium"),
+            ],
+          ),
         ),
       ],
     );
   }
 
-  LineChartBarData _buildLine(List<double> data, Color color) {
+  LineChartBarData _buildLine(List<double> values, Color color) {
     return LineChartBarData(
-      spots: List.generate(
-        data.length,
-        (i) => FlSpot(i.toDouble(), data[i]),
-      ),
+      spots: List.generate(values.length, (i) => FlSpot(i.toDouble(), values[i])),
       isCurved: true,
       color: color,
-      dotData: FlDotData(show: false),
-      belowBarData: BarAreaData(show: false),
+      barWidth: 2,
+      dotData: const FlDotData(show: false),
     );
   }
+}
 
-  Widget _buildLegendItem(Color color, String label) {
+class _LegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _LegendItem({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Container(width: 12, height: 12, color: color),
+        Container(width: 16, height: 16, color: color),
         const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 12)),
+        Text(label),
       ],
     );
   }
