@@ -1,32 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:syncfusion_flutter_gauges/gauges.dart';
 
-class GaugeWidget extends StatelessWidget {
-  final double value;
-  final String label;
-  final String unit;
+class GaugesWidget extends StatelessWidget {
+  final double pH;
 
-  const GaugeWidget({
-    super.key,
-    required this.value,
-    required this.label,
-    required this.unit,
-  });
+  const GaugesWidget({super.key, required this.pH});
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Text(
-              "$value $unit",
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            Text(label),
-          ],
-        ),
+    return SfRadialGauge(
+      title: const GaugeTitle(
+        text: "Soil pH",
+        textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
       ),
+      axes: <RadialAxis>[
+        RadialAxis(
+          minimum: 3,
+          maximum: 10,
+          ranges: <GaugeRange>[
+            GaugeRange(startValue: 3, endValue: 5.5, color: Colors.red),
+            GaugeRange(startValue: 5.5, endValue: 7.5, color: Colors.green),
+            GaugeRange(startValue: 7.5, endValue: 10, color: Colors.orange),
+          ],
+          pointers: <GaugePointer>[NeedlePointer(value: pH)],
+          annotations: <GaugeAnnotation>[
+            GaugeAnnotation(
+              widget: Text(
+                pH.toStringAsFixed(2),
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              angle: 90,
+              positionFactor: 0.5,
+            )
+          ],
+        )
+      ],
     );
   }
 }
