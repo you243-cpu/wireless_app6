@@ -1,26 +1,32 @@
 import 'package:flutter/material.dart';
-import 'package:percent_indicator/circular_percent_indicator.dart';
 
-class Gauges extends StatelessWidget {
-  final double pH;
-  final Color pHColor;
+class GaugeWidget extends StatelessWidget {
+  final double value;
+  final String label;
+  final String unit;
 
-  const Gauges({
-    Key? key,
-    required this.pH,
-    required this.pHColor,
-  }) : super(key: key);
+  const GaugeWidget({
+    super.key,
+    required this.value,
+    required this.label,
+    required this.unit,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return CircularPercentIndicator(
-      radius: 80,
-      lineWidth: 12,
-      percent: (pH / 14).clamp(0.0, 1.0),
-      center: Text("pH ${pH.toStringAsFixed(1)}"),
-      progressColor: pHColor,
-      backgroundColor: Colors.grey.shade300,
-      circularStrokeCap: CircularStrokeCap.round,
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(
+              "$value $unit",
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            Text(label),
+          ],
+        ),
+      ),
     );
   }
 }
