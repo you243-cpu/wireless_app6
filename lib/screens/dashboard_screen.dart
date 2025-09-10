@@ -96,11 +96,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Load default CSV asset
   Future<void> _loadAssetCSV() async {
-    final csvString = await rootBundle.loadString('assets/data_aug24.csv');
-    final parsed = await CSVService.parseCSV(csvString);
-    _updateProvider(parsed);
-  }
+    try{
+      final csvString = await rootBundle.loadString('assets/simulated_soil_square.csv');
+      final parsed = await CSVService.parseCSV(csvString);
+      _updateProvider(parsed);
 
+    // Prepare preview for SnackBar
+    final numPreview = 3; // first 3 rows
+    final totalRows = parsed["timestamps"]!.length;
+    final previewRows = <String>[];
+
+    for (int i = 0; i < totalRows && i < numPreview; i++) {
+      previewRows.add(
+        "Row ${i + 1}: pH=${parsed["pH"]![i]}, Temp=${parsed["temperature"]![i]}, Humidity=${parsed["humidity"]![i]}"
+      );
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Default CSV loaded: $totalRows rows.\n" + previewRows.join("\n"),
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed to load default CSV: $e"),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
   // Pick CSV file
   Future<void> pickCsvFile() async {
     final parsed = await CSVService.pickCSV();
