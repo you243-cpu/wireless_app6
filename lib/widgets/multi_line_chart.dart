@@ -6,6 +6,9 @@ class MultiLineChartWidget extends StatelessWidget {
   final List<double> nData;
   final List<double> pData;
   final List<double> kData;
+  final List<double> temperatureData;
+  final List<double> humidityData;
+  final List<double> ecData;
   final List<DateTime> timestamps;
 
   final double zoomLevel;
@@ -17,6 +20,9 @@ class MultiLineChartWidget extends StatelessWidget {
     required this.nData,
     required this.pData,
     required this.kData,
+    required this.temperatureData,
+    required this.humidityData,
+    required this.ecData,
     required this.timestamps,
     this.zoomLevel = 1.0,
     this.scrollIndex = 0,
@@ -91,6 +97,9 @@ class MultiLineChartWidget extends StatelessWidget {
                   _buildLine(nData.sublist(start, end), Colors.blue),
                   _buildLine(pData.sublist(start, end), Colors.orange),
                   _buildLine(kData.sublist(start, end), Colors.purple),
+                  _buildLine(temperatureData.sublist(start, end), Colors.red),
+                  _buildLine(humidityData.sublist(start, end), Colors.cyan),
+                  _buildLine(ecData.sublist(start, end), Colors.indigo),
                 ],
               ),
             ),
@@ -106,6 +115,9 @@ class MultiLineChartWidget extends StatelessWidget {
               _LegendItem(color: Colors.blue, label: "Nitrogen", textColor: axisColor),
               _LegendItem(color: Colors.orange, label: "Phosphorus", textColor: axisColor),
               _LegendItem(color: Colors.purple, label: "Potassium", textColor: axisColor),
+              _LegendItem(color: Colors.red, label: "Temperature", textColor: axisColor),
+              _LegendItem(color: Colors.cyan, label: "Humidity", textColor: axisColor),
+              _LegendItem(color: Colors.indigo, label: "EC", textColor: axisColor),
             ],
           ),
         ),
