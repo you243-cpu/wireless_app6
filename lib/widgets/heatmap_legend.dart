@@ -1,4 +1,3 @@
-// lib/widgets/heatmap_legend.dart
 import 'package:flutter/material.dart';
 
 class HeatmapLegend extends StatelessWidget {
@@ -100,4 +99,3 @@ class HeatmapLegend extends StatelessWidget {
           );
   }
 }
-
