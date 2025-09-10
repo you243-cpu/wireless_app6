@@ -8,7 +8,26 @@ import '../widgets/heatmap_3d.dart';
 import '../main.dart'; // ✅ import themeNotifier from main.dart
 
 class HeatmapScreen extends StatefulWidget {
-  const HeatmapScreen({super.key});
+  final List<double> pHReadings;
+  final List<double> temperatureReadings;
+  final List<double> humidityReadings;
+  final List<double> ecReadings;
+  final List<double> nReadings;
+  final List<double> pReadings;
+  final List<double> kReadings;
+  final List<DateTime> timestamps;
+
+  const HeatmapScreen({
+    super.key,
+    required this.pHReadings,
+    required this.temperatureReadings,
+    required this.humidityReadings,
+    required this.ecReadings,
+    required this.nReadings,
+    required this.pReadings,
+    required this.kReadings,
+    required this.timestamps,
+  });
 
   @override
   State<HeatmapScreen> createState() => _HeatmapScreenState();
@@ -25,41 +44,54 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   @override
   void initState() {
     super.initState();
-  }
-
-  Future<void> _loadCsvFromPicker() async {
-    final res = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['csv'],
-    );
-    if (res == null) return;
-    final path = res.files.single.path!;
-    final content = await File(path).readAsString();
-    final pts = HeatmapService.parseCsvString(content);
-    _svc.setPoints(pts);
-
-    if (pts.isNotEmpty) {
-      final minT = pts.map((p) => p.t).reduce((a, b) => a.isBefore(b) ? a : b);
-      final maxT = pts.map((p) => p.t).reduce((a, b) => a.isAfter(b) ? a : b);
-      setState(() {
-        _range = DateTimeRange(start: minT, end: maxT);
-      });
-      _computeGrid();
-    }
+    // Initialize grid with default metric if readings are provided
+    _computeGrid();
   }
 
   void _computeGrid() {
-    if (_range == null) return;
-    final rowsColsGrid = _svc.createGrid(
+    if (_range == null) {
+      // default to full timestamps
+      if (widget.timestamps.isNotEmpty) {
+        _range = DateTimeRange(start: widget.timestamps.first, end: widget.timestamps.last);
+      } else {
+        return;
+      }
+    }
+
+    List<List<double>> dataGrid = _svc.createGrid(
       metric: _metric,
       start: _range!.start,
       end: _range!.end,
       cols: cols,
       rows: rows,
+      readings: _getMetricData(_metric),
+      timestamps: widget.timestamps,
     );
+
     setState(() {
-      _grid = rowsColsGrid;
+      _grid = dataGrid;
     });
+  }
+
+  List<double> _getMetricData(String metric) {
+    switch (metric) {
+      case 'pH':
+        return widget.pHReadings;
+      case 'Temperature':
+        return widget.temperatureReadings;
+      case 'Humidity':
+        return widget.humidityReadings;
+      case 'EC':
+        return widget.ecReadings;
+      case 'N':
+        return widget.nReadings;
+      case 'P':
+        return widget.pReadings;
+      case 'K':
+        return widget.kReadings;
+      default:
+        return widget.pHReadings;
+    }
   }
 
   void _setMetric(String metric) {
@@ -70,21 +102,17 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   }
 
   void _pickRange() async {
-    if (_svc.points.isEmpty) {
+    if (widget.timestamps.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Load CSV first")),
+        const SnackBar(content: Text("No data loaded")),
       );
       return;
     }
-    final minT =
-        _svc.points.map((p) => p.t).reduce((a, b) => a.isBefore(b) ? a : b);
-    final maxT =
-        _svc.points.map((p) => p.t).reduce((a, b) => a.isAfter(b) ? a : b);
     final picked = await showDateRangePicker(
       context: context,
-      firstDate: minT,
-      lastDate: maxT,
-      initialDateRange: _range ?? DateTimeRange(start: minT, end: maxT),
+      firstDate: widget.timestamps.first,
+      lastDate: widget.timestamps.last,
+      initialDateRange: _range ?? DateTimeRange(start: widget.timestamps.first, end: widget.timestamps.last),
     );
     if (picked != null) {
       setState(() {
@@ -97,6 +125,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   @override
   Widget build(BuildContext context) {
     final metrics = ['pH', 'Temperature', 'Humidity', 'EC', 'N', 'P', 'K'];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -126,11 +155,6 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
               spacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                ElevatedButton.icon(
-                  onPressed: _loadCsvFromPicker,
-                  icon: const Icon(Icons.upload_file),
-                  label: const Text("Load CSV"),
-                ),
                 const Text("Metric:"),
                 DropdownButton<String>(
                   value: _metric,
@@ -183,11 +207,10 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
               ],
             ),
           ),
-
           Expanded(
             child: _grid.isEmpty
                 ? const Center(
-                    child: Text("No grid yet — load CSV and pick range"),
+                    child: Text("No grid yet — pick metric and date range"),
                   )
                 : _show3D
                     ? Heatmap3DViewer(
