@@ -1,28 +1,12 @@
+// lib/screens/graph_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../widgets/line_chart.dart';
 import '../widgets/multi_line_chart.dart';
+import '../providers/csv_data_provider.dart';
 
 class GraphScreen extends StatefulWidget {
-  final List<double> pHReadings;
-  final List<double> nReadings;
-  final List<double> pReadings;
-  final List<double> kReadings;
-  final List<double> temperatureReadings;
-  final List<double> humidityReadings;
-  final List<double> ecReadings;
-  final List<DateTime> timestamps;
-
-  const GraphScreen({
-    super.key,
-    required this.pHReadings,
-    required this.nReadings,
-    required this.pReadings,
-    required this.kReadings,
-    required this.temperatureReadings,
-    required this.humidityReadings,
-    required this.ecReadings,
-    required this.timestamps,
-  });
+  const GraphScreen({super.key});
 
   @override
   State<GraphScreen> createState() => _GraphScreenState();
@@ -32,38 +16,29 @@ class _GraphScreenState extends State<GraphScreen> {
   double zoomLevel = 1;
   int scrollIndex = 0;
 
-  void zoomIn() {
-    setState(() {
-      if (zoomLevel < 5) zoomLevel += 1.0;
-    });
-  }
-
-  void zoomOut() {
-    setState(() {
-      if (zoomLevel > 1) zoomLevel -= 1.0;
-    });
-  }
-
-  void scrollLeft() {
-    setState(() {
-      if (scrollIndex > 0) scrollIndex--;
-    });
-  }
-
+  void zoomIn() => setState(() { if (zoomLevel < 5) zoomLevel += 1; });
+  void zoomOut() => setState(() { if (zoomLevel > 1) zoomLevel -= 1; });
+  void scrollLeft() => setState(() { if (scrollIndex > 0) scrollIndex--; });
   void scrollRight() {
-    setState(() {
-      if (scrollIndex < widget.timestamps.length - 10) scrollIndex++;
-    });
+    final provider = context.read<CSVDataProvider>();
+    if (scrollIndex < provider.timestamps.length - 10) scrollIndex++;
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    final isDark = brightness == Brightness.dark;
+    final provider = context.watch<CSVDataProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final tabLabelColor = isDark ? Colors.tealAccent : Colors.green;
     final unselectedTabColor = isDark ? Colors.grey[400]! : Colors.grey[600]!;
     final iconColor = isDark ? Colors.tealAccent : Colors.black87;
+
+    if (!provider.hasData) {
+      return const Scaffold(
+        body: Center(child: Text("No data available.")),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -73,7 +48,6 @@ class _GraphScreenState extends State<GraphScreen> {
       ),
       body: Column(
         children: [
-          // Zoom & Scroll controls
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -85,7 +59,7 @@ class _GraphScreenState extends State<GraphScreen> {
           ),
           Expanded(
             child: DefaultTabController(
-              length: 8, // 5 original + 3 new readings
+              length: 8,
               child: Column(
                 children: [
                   TabBar(
@@ -109,70 +83,70 @@ class _GraphScreenState extends State<GraphScreen> {
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
                         LineChartWidget(
-                          data: widget.pHReadings,
+                          data: provider.pH,
                           color: Colors.green,
                           label: "pH",
-                          timestamps: widget.timestamps,
+                          timestamps: provider.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: widget.nReadings,
+                          data: provider.n,
                           color: Colors.blue,
                           label: "N",
-                          timestamps: widget.timestamps,
+                          timestamps: provider.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: widget.pReadings,
+                          data: provider.p,
                           color: Colors.orange,
                           label: "P",
-                          timestamps: widget.timestamps,
+                          timestamps: provider.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: widget.kReadings,
+                          data: provider.k,
                           color: Colors.purple,
                           label: "K",
-                          timestamps: widget.timestamps,
+                          timestamps: provider.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: widget.temperatureReadings,
+                          data: provider.temperature,
                           color: Colors.red,
                           label: "Temperature",
-                          timestamps: widget.timestamps,
+                          timestamps: provider.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: widget.humidityReadings,
+                          data: provider.humidity,
                           color: Colors.cyan,
                           label: "Humidity",
-                          timestamps: widget.timestamps,
+                          timestamps: provider.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: widget.ecReadings,
+                          data: provider.ec,
                           color: Colors.indigo,
                           label: "EC",
-                          timestamps: widget.timestamps,
+                          timestamps: provider.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         MultiLineChartWidget(
-                          pHData: widget.pHReadings,
-                          nData: widget.nReadings,
-                          pData: widget.pReadings,
-                          kData: widget.kReadings,
-                          temperatureData: widget.temperatureReadings,
-                          humidityData: widget.humidityReadings,
-                          ecData: widget.ecReadings,
-                          timestamps: widget.timestamps,
+                          pHData: provider.pH,
+                          nData: provider.n,
+                          pData: provider.p,
+                          kData: provider.k,
+                          temperatureData: provider.temperature,
+                          humidityData: provider.humidity,
+                          ecData: provider.ec,
+                          timestamps: provider.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
