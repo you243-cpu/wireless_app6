@@ -5,13 +5,14 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
+import '../main.dart'; // ✅ To access MyApp.themeNotifier
 import '../services/csv_service.dart';
 import '../services/alert_service.dart';
 import '../widgets/soil_health_card.dart';
 import '../widgets/gauges.dart';
 import '../widgets/nutrient_card.dart';
 import 'graph_screen.dart';
-import 'heatmap_screen.dart'; // ✅ New import
+import 'heatmap_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -41,7 +42,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<DateTime> timestamps = [];
 
   Timer? _timer;
-  bool isDarkMode = false;
 
   @override
   void initState() {
@@ -133,80 +133,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return DateFormat("MM-dd HH:mm").format(timestamps[index]);
   }
 
+  // ✅ Cycle theme: System → Light → Dark
+  void _toggleTheme() {
+    final current = MyApp.themeNotifier.value;
+    if (current == ThemeMode.system) {
+      MyApp.themeNotifier.value = ThemeMode.light;
+    } else if (current == ThemeMode.light) {
+      MyApp.themeNotifier.value = ThemeMode.dark;
+    } else {
+      MyApp.themeNotifier.value = ThemeMode.system;
+    }
+  }
+
+  Icon _themeIcon() {
+    final mode = MyApp.themeNotifier.value;
+    if (mode == ThemeMode.dark) return const Icon(Icons.dark_mode);
+    if (mode == ThemeMode.light) return const Icon(Icons.light_mode);
+    return const Icon(Icons.brightness_auto); // system
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      theme: isDarkMode ? ThemeData.dark() : ThemeData.light(),
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text("🌱 Soil Sensor Dashboard"),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.upload_file),
-              tooltip: "Load CSV",
-              onPressed: pickCsvFile,
-            ),
-            IconButton(
-              icon: Icon(isDarkMode ? Icons.dark_mode : Icons.light_mode),
-              onPressed: () => setState(() => isDarkMode = !isDarkMode),
-            ),
-            IconButton(
-              icon: const Icon(Icons.show_chart),
-              tooltip: "Open Graphs",
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => GraphScreen(
-                      pHReadings: pHReadings,
-                      nReadings: nReadings,
-                      pReadings: pReadings,
-                      kReadings: kReadings,
-                      timestamps: timestamps,
-                      temperatureReadings: temperatureReadings,
-                      humidityReadings: humidityReadings,
-                      ecReadings: ecReadings,
-                    ),
-                  ),
-                );
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.grid_on),
-              tooltip: "Open Heatmaps",
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => HeatmapScreen(
-                      pHReadings: pHReadings,
-                      temperatureReadings: temperatureReadings,
-                      humidityReadings: humidityReadings,
-                      ecReadings: ecReadings,
-                      nReadings: nReadings,
-                      pReadings: pReadings,
-                      kReadings: kReadings,
-                      timestamps: timestamps,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              SoilHealthCard(message: AlertService.getAlertMessage(pH)),
-              const SizedBox(height: 20),
-              GaugesWidget(pH: pH),
-              const SizedBox(height: 20),
-              NutrientCard(N: N, P: P, K: K),
-              const SizedBox(height: 20),
-              Text("🌡️ Temp: $temperature °C   💧 Humidity: $humidity%   ⚡ EC: $ec"),
-            ],
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("🌱 Soil Sensor Dashboard"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.upload_file),
+            tooltip: "Load CSV",
+            onPressed: pickCsvFile,
           ),
+          IconButton(
+            icon: _themeIcon(),
+            tooltip: "Toggle Theme",
+            onPressed: () {
+              setState(() => _toggleTheme());
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.show_chart),
+            tooltip: "Open Graphs",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => GraphScreen(
+                    pHReadings: pHReadings,
+                    nReadings: nReadings,
+                    pReadings: pReadings,
+                    kReadings: kReadings,
+                    timestamps: timestamps,
+                    temperatureReadings: temperatureReadings,
+                    humidityReadings: humidityReadings,
+                    ecReadings: ecReadings,
+                  ),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.grid_on),
+            tooltip: "Open Heatmaps",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => HeatmapScreen(
+                    pHReadings: pHReadings,
+                    temperatureReadings: temperatureReadings,
+                    humidityReadings: humidityReadings,
+                    ecReadings: ecReadings,
+                    nReadings: nReadings,
+                    pReadings: pReadings,
+                    kReadings: kReadings,
+                    timestamps: timestamps,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            SoilHealthCard(message: AlertService.getAlertMessage(pH)),
+            const SizedBox(height: 20),
+            GaugesWidget(pH: pH),
+            const SizedBox(height: 20),
+            NutrientCard(N: N, P: P, K: K),
+            const SizedBox(height: 20),
+            Text("🌡️ Temp: $temperature °C   💧 Humidity: $humidity%   ⚡ EC: $ec"),
+          ],
         ),
       ),
     );
