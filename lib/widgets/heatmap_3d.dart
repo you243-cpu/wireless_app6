@@ -41,14 +41,16 @@ Future<Uint8List> renderGridToPngBytes(List<List<double>> grid, {int pixelPerCel
   return byteData!.buffer.asUint8List();
 }
 
-/// Controller to manage 3D camera rotation & reset
+/// Controller to manage 3D camera rotation & zoom
 class Heatmap3DController {
   double rotationX = -90;
   double rotationY = 0;
+  double zoom = 10.0;
 
   void reset() {
     rotationX = -90;
     rotationY = 0;
+    zoom = 10.0;
   }
 }
 
@@ -77,6 +79,7 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
   double _minValue = 0;
   double _maxValue = 1;
   Offset? _lastDrag;
+  double? _lastScale;
 
   @override
   void initState() {
@@ -103,13 +106,10 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
     );
   }
 
-  void _applyControllerRotation() {
+  void _applyController() {
     if (planeObj != null) {
-      planeObj!.rotation.setValues(
-        widget.controller.rotationX,
-        widget.controller.rotationY,
-        0,
-      );
+      planeObj!.rotation.setValues(widget.controller.rotationX, widget.controller.rotationY, 0);
+      _scene.camera.zoom = widget.controller.zoom;
       _scene.update();
     }
   }
@@ -164,16 +164,24 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
                     setState(() {
                       widget.controller.rotationY += dx * 0.5;
                       widget.controller.rotationX += dy * 0.5;
-                      _applyControllerRotation();
+                      _applyController();
                     });
                   },
                   onPanEnd: (_) => _lastDrag = null,
+                  onScaleStart: (details) => _lastScale = widget.controller.zoom,
+                  onScaleUpdate: (details) {
+                    if (_lastScale == null) return;
+                    setState(() {
+                      widget.controller.zoom = (_lastScale! / details.scale).clamp(2.0, 50.0);
+                      _applyController();
+                    });
+                  },
                   child: Container(
                     color: isDark ? Colors.black : Colors.white,
                     child: Cube(
                       onSceneCreated: (Scene scene) {
                         _scene = scene;
-                        scene.camera.zoom = 10;
+                        scene.camera.zoom = widget.controller.zoom;
                         if (planeObj != null) scene.world.add(planeObj!);
                       },
                     ),
@@ -191,7 +199,7 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
               ElevatedButton.icon(
                 onPressed: () {
                   widget.controller.reset();
-                  _applyControllerRotation();
+                  _applyController();
                 },
                 icon: const Icon(Icons.reset_tv),
                 label: const Text("Reset Camera"),
@@ -199,7 +207,7 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  "Use the 2D preview or drag the 3D pane to rotate.",
+                  "Use the 2D preview or pinch/drag the 3D pane to zoom/rotate.",
                   style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
                 ),
               ),
