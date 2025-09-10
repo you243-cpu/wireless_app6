@@ -95,96 +95,118 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // Load default CSV asset
+  // Load default CSV asset safely
   Future<void> _loadAssetCSV() async {
-    try{
-      final csvString = await rootBundle.loadString('assets/simulated_soil_square.csv');
+    try {
+      final csvString = await rootBundle.loadString('assets/data_aug24.csv');
+
       final parsed = await CSVService.parseCSV(csvString);
+
+      // Check if parsing returned valid data
+      if (parsed == null ||
+          parsed["timestamps"] == null ||
+          parsed["pH"] == null ||
+          parsed["temperature"] == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to load default CSV or CSV is empty")),
+        );
+        return;
+      }
+
       _updateProvider(parsed);
-
-    // Prepare preview for SnackBar
-    final numPreview = 3; // first 3 rows
-    final totalRows = parsed["timestamps"]!.length;
-    final previewRows = <String>[];
-
-    for (int i = 0; i < totalRows && i < numPreview; i++) {
-      previewRows.add(
-        "Row ${i + 1}: pH=${parsed["pH"]![i]}, Temp=${parsed["temperature"]![i]}, Humidity=${parsed["humidity"]![i]}"
-      );
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
+  
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            "Default CSV loaded: $totalRows rows.\n" + previewRows.join("\n"),
+            "Loaded default CSV with ${parsed["timestamps"]!.length} rows successfully",
           ),
-          duration: const Duration(seconds: 5),
         ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Failed to load default CSV: $e"),
-          duration: const Duration(seconds: 5),
-        ),
+        SnackBar(content: Text("Error loading default CSV: $e")),
       );
+      print("Default CSV loading error: $e");
     }
   }
+  
   // Pick CSV file
+  // Pick CSV file safely
   Future<void> pickCsvFile() async {
     try {
       final parsed = await CSVService.pickCSV();
-      if (parsed != null) {
-        _updateProvider(parsed);
 
-        final totalRows = parsed["timestamps"]!.length;
-        final previewRows = <String>[];
-        for (int i = 0; i < totalRows && i < 3; i++) {
-          previewRows.add(
-            "Row ${i + 1}: pH=${parsed["pH"]![i]}, Temp=${parsed["temperature"]![i]}, Humidity=${parsed["humidity"]![i]}"
-          );
-        }
-
+      // Check if parsing returned anything
+      if (parsed == null ||
+          parsed["timestamps"] == null ||
+          parsed["pH"] == null ||
+          parsed["temperature"] == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "CSV loaded: $totalRows rows.\n" + previewRows.join("\n"),
-            ),
-            duration: const Duration(seconds: 5),
-          ),
+          const SnackBar(content: Text("Failed to load CSV or CSV is empty")),
         );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("No file selected."),
-            duration: Duration(seconds: 3),
-          ),
-        );
+        return;
       }
-    } catch (e) {
+  
+      // Update provider safely
+      _updateProvider(parsed);
+  
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Failed to load CSV: $e"),
-          duration: const Duration(seconds: 5),
-        ),
+            content:
+                Text("Loaded ${parsed["timestamps"]!.length} rows successfully")),
       );
+    } catch (e) {
+      // Catch any unexpected errors
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error loading CSV: $e")),
+      );
+      print("CSV loading error: $e");
     }
   }
-
+  
+  // Safe provider update
   void _updateProvider(Map<String, List<dynamic>> parsed) {
     final provider = context.read<CSVDataProvider>();
-    provider.updateData(
-      pH: parsed["pH"]!.cast<double>(),
-      temperature: parsed["temperature"]!.cast<double>(),
-      humidity: parsed["humidity"]!.cast<double>(),
-      ec: parsed["EC"]!.cast<double>(),
-      n: parsed["N"]!.cast<double>(),
-      p: parsed["P"]!.cast<double>(),
-      k: parsed["K"]!.cast<double>(),
-      timestamps: parsed["timestamps"]!.cast<DateTime>(),
-      latitudes: parsed["latitudes"]!.cast<double>(),
-      longitudes: parsed["longitudes"]!.cast<double>(),
-    );
-  }
 
+    // Make sure all required keys exist
+    if (parsed["timestamps"] == null ||
+        parsed["pH"] == null ||
+        parsed["temperature"] == null ||
+        parsed["humidity"] == null ||
+        parsed["EC"] == null ||
+        parsed["N"] == null ||
+        parsed["P"] == null ||
+        parsed["K"] == null ||
+        parsed["latitudes"] == null ||
+        parsed["longitudes"] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("CSV missing required columns")),
+      );
+      return;
+    }
+    
+    try {
+      provider.updateData(
+        pH: parsed["pH"]!.cast<double>(),
+        temperature: parsed["temperature"]!.cast<double>(),
+        humidity: parsed["humidity"]!.cast<double>(),
+        ec: parsed["EC"]!.cast<double>(),
+        n: parsed["N"]!.cast<double>(),
+        p: parsed["P"]!.cast<double>(),
+        k: parsed["K"]!.cast<double>(),
+        timestamps: parsed["timestamps"]!.cast<DateTime>(),
+        latitudes: parsed["latitudes"]!.cast<double>(),
+        longitudes: parsed["longitudes"]!.cast<double>(),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error updating provider: $e")),
+      );
+      print("Provider update error: $e");
+    }
+  }
+  
+  
   void _toggleTheme() {
     final current = MyApp.themeNotifier.value;
     MyApp.themeNotifier.value = current == ThemeMode.system
