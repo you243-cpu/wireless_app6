@@ -93,10 +93,19 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
   @override
   void initState() {
     super.initState();
-    _generateTexture();
+    _updateTexture();
   }
 
-  Future<void> _generateTexture() async {
+  @override
+  void didUpdateWidget(covariant Heatmap3DViewer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Update texture if grid data changes
+    if (oldWidget.grid != widget.grid) {
+      _updateTexture();
+    }
+  }
+
+  Future<void> _updateTexture() async {
     if (widget.grid.isEmpty) return;
 
     final values = widget.grid.expand((r) => r).where((v) => !v.isNaN).toList();
@@ -106,16 +115,17 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
     final bytes = await renderGridToPngBytes(widget.grid, pixelPerCell: 8);
     setState(() => _imageBytes = bytes);
 
-    planeObj = Object(
+    planeObj ??= Object(
       name: 'plane',
       scale: Vector3(widget.planeSize, 1, widget.planeSize),
       rotation: Vector3(widget.controller.rotationX, widget.controller.rotationY, 0),
       position: Vector3(0, 0, 0),
       fileName: null,
     );
+
+    _applyController();
   }
 
-  /// Apply controller values to scene
   void _applyController() {
     if (planeObj != null && _scene != null) {
       planeObj!.rotation.setValues(widget.controller.rotationX, widget.controller.rotationY, 0);
@@ -124,7 +134,6 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
     }
   }
 
-  /// Reset camera view
   void _resetCamera() {
     widget.controller.reset();
     _applyController();
@@ -207,7 +216,7 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
             ],
           ),
         ),
-        // controls
+        // Controls
         Padding(
           padding: const EdgeInsets.all(8),
           child: Row(
