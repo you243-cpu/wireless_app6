@@ -1,9 +1,8 @@
 // lib/screens/heatmap_screen.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
 import '../services/heatmap_service.dart';
-import '../widgets/heatmap_2d.dart';
 import '../widgets/heatmap_3d.dart';
+import '../widgets/heatmap_2d.dart';
 import '../main.dart';
 
 class HeatmapScreen extends StatefulWidget {
@@ -37,91 +36,69 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   final Heatmap3DController _cameraController = Heatmap3DController();
 
   String _metric = 'pH';
-  DateTimeRange? _range;
-  int cols = 40, rows = 40;
   List<List<double>> _grid = [];
-  bool _show3D = false;
+  bool _show3D = true;
+  double _sliderValue = 1.0; // 1.0 = latest
+
+  final int _defaultCols = 40;
+  final int _defaultRows = 40;
 
   @override
   void initState() {
     super.initState();
-    _computeGrid();
+    _loadCsvAndInit();
   }
 
-  void _computeGrid() {
-    if (_range == null && widget.timestamps.isNotEmpty) {
-      _range = DateTimeRange(start: widget.timestamps.first, end: widget.timestamps.last);
+  void _loadCsvAndInit() {
+    // Set points in HeatmapService
+    List<HeatPoint> points = [];
+    for (int i = 0; i < widget.timestamps.length; i++) {
+      points.add(HeatPoint(
+        t: widget.timestamps[i],
+        lat: 0, // placeholder if no lat/lon
+        lon: 0,
+        pH: widget.pHReadings[i],
+        temp: widget.temperatureReadings[i],
+        humidity: widget.humidityReadings[i],
+        ec: widget.ecReadings[i],
+        n: widget.nReadings[i],
+        p: widget.pReadings[i],
+        k: widget.kReadings[i],
+      ));
     }
+    _svc.setPoints(points);
+    _updateGrid();
+  }
 
-    if (_range == null) return;
+  void _updateGrid() {
+    if (_svc.points.isEmpty) return;
 
-    List<List<double>> dataGrid = _svc.createGrid(
-      metric: _metric,
-      start: _range!.start,
-      end: _range!.end,
-      cols: cols,
-      rows: rows,
-    );
+    // Compute current timestamp from slider (0..1)
+    DateTime startTime = _svc.points.first.t;
+    DateTime endTime = _svc.points.last.t;
+    DateTime rangeEnd = startTime.add(Duration(
+      milliseconds: ((endTime.millisecondsSinceEpoch - startTime.millisecondsSinceEpoch) * _sliderValue).toInt(),
+    ));
 
     setState(() {
-      _grid = dataGrid;
+      _grid = _svc.createGrid(
+        metric: _metric,
+        start: startTime,
+        end: rangeEnd,
+        cols: _defaultCols,
+        rows: _defaultRows,
+      );
     });
-  }
-
-  List<double> _getMetricData(String metric) {
-    switch (metric) {
-      case 'pH':
-        return widget.pHReadings;
-      case 'Temperature':
-        return widget.temperatureReadings;
-      case 'Humidity':
-        return widget.humidityReadings;
-      case 'EC':
-        return widget.ecReadings;
-      case 'N':
-        return widget.nReadings;
-      case 'P':
-        return widget.pReadings;
-      case 'K':
-        return widget.kReadings;
-      default:
-        return widget.pHReadings;
-    }
   }
 
   void _setMetric(String metric) {
-    setState(() {
-      _metric = metric;
-      _computeGrid();
-    });
-  }
-
-  void _pickRange() async {
-    if (widget.timestamps.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No data loaded")),
-      );
-      return;
-    }
-
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: widget.timestamps.first,
-      lastDate: widget.timestamps.last,
-      initialDateRange: _range ?? DateTimeRange(start: widget.timestamps.first, end: widget.timestamps.last),
-    );
-
-    if (picked != null) {
-      setState(() {
-        _range = picked;
-      });
-      _computeGrid();
-    }
+    _metric = metric;
+    _updateGrid();
   }
 
   @override
   Widget build(BuildContext context) {
-    final metrics = ['pH', 'Temperature', 'Humidity', 'EC', 'N', 'P', 'K'];
+    final metrics = ['pH', 'Temperature', 'EC', 'N', 'P', 'K', 'All'];
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -129,11 +106,9 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         title: const Text("Heatmap Viewer"),
         actions: [
           IconButton(
-            icon: Icon(
-              MyApp.themeNotifier.value == ThemeMode.dark
-                  ? Icons.dark_mode
-                  : Icons.light_mode,
-            ),
+            icon: Icon(MyApp.themeNotifier.value == ThemeMode.dark
+                ? Icons.dark_mode
+                : Icons.light_mode),
             onPressed: () {
               MyApp.themeNotifier.value =
                   MyApp.themeNotifier.value == ThemeMode.dark
@@ -145,58 +120,67 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       ),
       body: Column(
         children: [
-          // Controls
+          // Metric buttons
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Wrap(
               spacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
+              children: metrics
+                  .map(
+                    (m) => ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _metric == m ? Colors.blue : null,
+                      ),
+                      onPressed: () => _setMetric(m),
+                      child: Text(m),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+
+          // Timeline slider
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
               children: [
-                const Text("Metric:"),
-                DropdownButton<String>(
-                  value: _metric,
-                  items: metrics
-                      .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) _setMetric(v);
-                  },
-                ),
-                ElevatedButton(onPressed: _pickRange, child: const Text("Pick Date Range")),
-                const Text("Cols:"),
-                SizedBox(
-                  width: 80,
-                  child: TextFormField(
-                    initialValue: cols.toString(),
-                    keyboardType: TextInputType.number,
-                    onChanged: (s) {
-                      final v = int.tryParse(s);
-                      if (v != null) cols = v;
+                const Text("Past"),
+                Expanded(
+                  child: Slider(
+                    value: _sliderValue,
+                    min: 0.0,
+                    max: 1.0,
+                    divisions: widget.timestamps.length - 1,
+                    label: "Time",
+                    onChanged: (v) {
+                      setState(() {
+                        _sliderValue = v;
+                        _updateGrid();
+                      });
                     },
                   ),
                 ),
-                const Text("Rows:"),
-                SizedBox(
-                  width: 80,
-                  child: TextFormField(
-                    initialValue: rows.toString(),
-                    keyboardType: TextInputType.number,
-                    onChanged: (s) {
-                      final v = int.tryParse(s);
-                      if (v != null) rows = v;
-                    },
-                  ),
-                ),
-                ElevatedButton(onPressed: _computeGrid, child: const Text("Rebuild Grid")),
+                const Text("Now"),
+              ],
+            ),
+          ),
+
+          // 2D/3D toggle
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
                 ElevatedButton(
                   onPressed: () => setState(() => _show3D = !_show3D),
                   child: Text(_show3D ? "Show 2D" : "Show 3D"),
                 ),
                 if (_show3D)
+                  const SizedBox(width: 12),
+                if (_show3D)
                   ElevatedButton.icon(
                     onPressed: () {
                       _cameraController.reset();
-                      setState(() {}); // triggers rebuild so camera updates
+                      setState(() {}); // triggers rebuild
                     },
                     icon: const Icon(Icons.reset_tv),
                     label: const Text("Reset Camera"),
@@ -205,10 +189,10 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
             ),
           ),
 
-          // Display Grid
+          // Heatmap display
           Expanded(
             child: _grid.isEmpty
-                ? const Center(child: Text("No grid yet — pick metric and date range"))
+                ? const Center(child: Text("No data to display"))
                 : _show3D
                     ? Heatmap3DViewer(
                         grid: _grid,
