@@ -7,7 +7,6 @@ import '../services/heatmap_service.dart';
 Color valueToColor(double v, double min, double max) {
   if (v.isNaN) return Colors.transparent;
   final t = ((v - min) / (max - min)).clamp(0.0, 1.0);
-  // gradient from blue (low) -> green -> yellow -> red (high)
   if (t < 0.33) {
     final tt = t / 0.33;
     return Color.lerp(Colors.blue, Colors.green, tt)!;
@@ -20,7 +19,6 @@ Color valueToColor(double v, double min, double max) {
   }
 }
 
-/// Reusable widget to draw heatmap grid
 class Heatmap2D extends StatelessWidget {
   final List<List<double>> grid;
   final double cellSize;
@@ -42,7 +40,7 @@ class Heatmap2D extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SizedBox(
-      width: cols * cellSize,
+      width: cols * cellSize + 60, // space for legend
       height: rows * cellSize,
       child: CustomPaint(
         painter: _HeatmapPainter(
@@ -78,7 +76,6 @@ class _HeatmapPainter extends CustomPainter {
     final rows = grid.length;
     final cols = grid[0].length;
 
-    // find min/max of non-nan
     double minV = double.infinity, maxV = -double.infinity;
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
@@ -111,18 +108,52 @@ class _HeatmapPainter extends CustomPainter {
       }
     }
 
-    // label (adapt to theme)
-    final tp = TextPainter(
-      text: TextSpan(
-        text: metricLabel,
-        style: TextStyle(
-          color: isDark ? Colors.white70 : Colors.black,
-          fontSize: 12,
-        ),
-      ),
+    // Legend
+    const legendWidth = 20.0;
+    final legendHeight = rows * cellSize;
+    final legendLeft = cols * cellSize + 10;
+    final legendTop = 0.0;
+
+    final legendRect = Rect.fromLTWH(legendLeft, legendTop, legendWidth, legendHeight);
+    final legendShader = ui.Gradient.linear(
+      Offset(legendLeft, legendTop),
+      Offset(legendLeft, legendTop + legendHeight),
+      [Colors.red, Colors.yellow, Colors.green, Colors.blue].reversed.toList(),
+      [0.0, 0.33, 0.66, 1.0],
+    );
+    final legendPaint = Paint()..shader = legendShader;
+    canvas.drawRect(legendRect, legendPaint);
+
+    // Legend border
+    final borderPaint = Paint()
+      ..color = isDark ? Colors.white54 : Colors.black54
+      ..style = PaintingStyle.stroke;
+    canvas.drawRect(legendRect, borderPaint);
+
+    // Legend labels
+    final textStyle = TextStyle(
+      color: isDark ? Colors.white70 : Colors.black,
+      fontSize: 12,
+    );
+
+    final minText = TextPainter(
+      text: TextSpan(text: minV.toStringAsFixed(2), style: textStyle),
       textDirection: TextDirection.ltr,
     )..layout();
-    tp.paint(canvas, const Offset(4, 4));
+    minText.paint(canvas, Offset(legendLeft + legendWidth + 4, legendHeight - 14));
+
+    final maxText = TextPainter(
+      text: TextSpan(text: maxV.toStringAsFixed(2), style: textStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    maxText.paint(canvas, Offset(legendLeft + legendWidth + 4, 0));
+
+    // Metric label
+    final tp = TextPainter(
+      text: TextSpan(text: metricLabel, style: textStyle.copyWith(fontWeight: FontWeight.bold)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(legendLeft, legendHeight + 4));
   }
 
   @override
