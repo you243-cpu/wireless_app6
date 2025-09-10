@@ -39,11 +39,19 @@ class Heatmap2D extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = grid.length;
     final cols = rows > 0 ? grid[0].length : 0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return SizedBox(
       width: cols * cellSize,
       height: rows * cellSize,
       child: CustomPaint(
-        painter: _HeatmapPainter(grid, cellSize, showGridLines, metricLabel),
+        painter: _HeatmapPainter(
+          grid,
+          cellSize,
+          showGridLines,
+          metricLabel,
+          isDark,
+        ),
       ),
     );
   }
@@ -54,14 +62,22 @@ class _HeatmapPainter extends CustomPainter {
   final double cellSize;
   final bool showGridLines;
   final String metricLabel;
+  final bool isDark;
 
-  _HeatmapPainter(this.grid, this.cellSize, this.showGridLines, this.metricLabel);
+  _HeatmapPainter(
+    this.grid,
+    this.cellSize,
+    this.showGridLines,
+    this.metricLabel,
+    this.isDark,
+  );
 
   @override
   void paint(Canvas canvas, Size size) {
     if (grid.isEmpty) return;
     final rows = grid.length;
     final cols = grid[0].length;
+
     // find min/max of non-nan
     double minV = double.infinity, maxV = -double.infinity;
     for (var r = 0; r < rows; r++) {
@@ -85,24 +101,32 @@ class _HeatmapPainter extends CustomPainter {
         final rect = Rect.fromLTWH(c * cellSize, r * cellSize, cellSize, cellSize);
         paint.color = valueToColor(v, minV, maxV);
         canvas.drawRect(rect, paint);
+
         if (showGridLines) {
-          final border = Paint()..color = Colors.black12..style = PaintingStyle.stroke;
+          final border = Paint()
+            ..color = isDark ? Colors.white24 : Colors.black12
+            ..style = PaintingStyle.stroke;
           canvas.drawRect(rect, border);
         }
       }
     }
 
-    // label
+    // label (adapt to theme)
     final tp = TextPainter(
-      text: TextSpan(text: metricLabel, style: const TextStyle(color: Colors.black, fontSize: 12)),
+      text: TextSpan(
+        text: metricLabel,
+        style: TextStyle(
+          color: isDark ? Colors.white70 : Colors.black,
+          fontSize: 12,
+        ),
+      ),
       textDirection: TextDirection.ltr,
     )..layout();
-    tp.paint(canvas, Offset(4, 4));
+    tp.paint(canvas, const Offset(4, 4));
   }
 
   @override
   bool shouldRepaint(covariant _HeatmapPainter old) {
-    return old.grid != grid || old.cellSize != cellSize;
+    return old.grid != grid || old.cellSize != cellSize || old.isDark != isDark;
   }
 }
-
