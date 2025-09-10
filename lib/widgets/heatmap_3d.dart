@@ -5,6 +5,7 @@ import 'package:flutter_cube/flutter_cube.dart';
 import '../services/heatmap_service.dart';
 import 'heatmap_legend.dart';
 
+/// Render 2D heatmap grid to PNG bytes
 Future<Uint8List> renderGridToPngBytes(List<List<double>> grid, {int pixelPerCell = 8}) async {
   final rows = grid.length;
   final cols = rows > 0 ? grid[0].length : 0;
@@ -41,7 +42,14 @@ Future<Uint8List> renderGridToPngBytes(List<List<double>> grid, {int pixelPerCel
   return byteData!.buffer.asUint8List();
 }
 
-/// Controller to manage 3D camera rotation & zoom
+/// Convert numeric value to color (blue -> red gradient)
+Color valueToColor(double value, double min, double max) {
+  if (value.isNaN) return Colors.transparent;
+  final t = ((value - min) / (max - min)).clamp(0.0, 1.0);
+  return Color.lerp(Colors.blue, Colors.red, t)!;
+}
+
+/// Controller for camera rotation & zoom
 class Heatmap3DController {
   double rotationX = -90;
   double rotationY = 0;
@@ -74,10 +82,11 @@ class Heatmap3DViewer extends StatefulWidget {
 
 class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
   Object? planeObj;
-  late Scene _scene;
+  Scene? _scene;
   Uint8List? _imageBytes;
   double _minValue = 0;
   double _maxValue = 1;
+
   Offset? _lastDrag;
   double? _lastScale;
 
@@ -106,12 +115,19 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
     );
   }
 
+  /// Apply controller values to scene
   void _applyController() {
-    if (planeObj != null) {
+    if (planeObj != null && _scene != null) {
       planeObj!.rotation.setValues(widget.controller.rotationX, widget.controller.rotationY, 0);
-      _scene.camera.zoom = widget.controller.zoom;
-      _scene.update();
+      _scene!.camera.zoom = widget.controller.zoom;
+      _scene!.update();
     }
+  }
+
+  /// Reset camera view
+  void _resetCamera() {
+    widget.controller.reset();
+    _applyController();
   }
 
   @override
@@ -179,7 +195,7 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
                   child: Container(
                     color: isDark ? Colors.black : Colors.white,
                     child: Cube(
-                      onSceneCreated: (Scene scene) {
+                      onSceneCreated: (scene) {
                         _scene = scene;
                         scene.camera.zoom = widget.controller.zoom;
                         if (planeObj != null) scene.world.add(planeObj!);
@@ -197,10 +213,7 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
           child: Row(
             children: [
               ElevatedButton.icon(
-                onPressed: () {
-                  widget.controller.reset();
-                  _applyController();
-                },
+                onPressed: _resetCamera,
                 icon: const Icon(Icons.reset_tv),
                 label: const Text("Reset Camera"),
               ),
