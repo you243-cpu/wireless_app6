@@ -30,9 +30,7 @@ class MultiLineChartWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (timestamps.isEmpty) {
-      return const Center(child: Text("No data"));
-    }
+    if (timestamps.isEmpty) return const Center(child: Text("No data"));
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final axisColor = isDark ? Colors.white70 : Colors.black87;
@@ -43,6 +41,16 @@ class MultiLineChartWidget extends StatelessWidget {
     int end = (start + visibleCount).clamp(0, timestamps.length);
 
     final shownTimestamps = timestamps.sublist(start, end);
+
+    List<LineChartBarData> lines = [
+      _buildLine(pHData.sublist(start, end), Colors.green),
+      _buildLine(nData.sublist(start, end), Colors.blue),
+      _buildLine(pData.sublist(start, end), Colors.orange),
+      _buildLine(kData.sublist(start, end), Colors.purple),
+      _buildLine(temperatureData.sublist(start, end), Colors.red),
+      _buildLine(humidityData.sublist(start, end), Colors.cyan),
+      _buildLine(ecData.sublist(start, end), Colors.indigo),
+    ];
 
     return Column(
       children: [
@@ -92,15 +100,7 @@ class MultiLineChartWidget extends StatelessWidget {
                   show: true,
                   border: Border.all(color: gridColor),
                 ),
-                lineBarsData: [
-                  _buildLine(pHData.sublist(start, end), Colors.green),
-                  _buildLine(nData.sublist(start, end), Colors.blue),
-                  _buildLine(pData.sublist(start, end), Colors.orange),
-                  _buildLine(kData.sublist(start, end), Colors.purple),
-                  _buildLine(temperatureData.sublist(start, end), Colors.red),
-                  _buildLine(humidityData.sublist(start, end), Colors.cyan),
-                  _buildLine(ecData.sublist(start, end), Colors.indigo),
-                ],
+                lineBarsData: lines,
               ),
             ),
           ),
