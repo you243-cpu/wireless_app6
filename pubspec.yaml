@@ -8,6 +8,8 @@ environment:
   
 dependencies:
   flutter:
+    assets:
+      - assets/simulated_soil_square.csv
     sdk: flutter
   provider: ^6.0.5
   flutter_cube: ^0.1.1
