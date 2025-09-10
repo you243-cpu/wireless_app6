@@ -23,7 +23,7 @@ class GraphScreen extends StatefulWidget {
 }
 
 class _GraphScreenState extends State<GraphScreen> {
-  double zoomLevel = 1; // 1 = full view
+  double zoomLevel = 1;
   int scrollIndex = 0;
 
   void zoomIn() {
@@ -52,15 +52,19 @@ class _GraphScreenState extends State<GraphScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pHReadings = widget.pHReadings;
-    final nReadings = widget.nReadings;
-    final pReadings = widget.pReadings;
-    final kReadings = widget.kReadings;
-    final timestamps = widget.timestamps;
+    final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
+
+    // Use theme colors for dark/light
+    final tabLabelColor = isDark ? Colors.tealAccent : Colors.green;
+    final unselectedTabColor = isDark ? Colors.grey[400]! : Colors.grey[600]!;
+    final iconColor = isDark ? Colors.tealAccent : Colors.black87;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("📊 Graphs"),
+        backgroundColor: isDark ? Colors.black : Colors.green[100],
+        foregroundColor: isDark ? Colors.white : Colors.black,
       ),
       body: Column(
         children: [
@@ -68,10 +72,10 @@ class _GraphScreenState extends State<GraphScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              IconButton(onPressed: zoomIn, icon: const Icon(Icons.zoom_in)),
-              IconButton(onPressed: zoomOut, icon: const Icon(Icons.zoom_out)),
-              IconButton(onPressed: scrollLeft, icon: const Icon(Icons.arrow_left)),
-              IconButton(onPressed: scrollRight, icon: const Icon(Icons.arrow_right)),
+              IconButton(onPressed: zoomIn, icon: Icon(Icons.zoom_in, color: iconColor)),
+              IconButton(onPressed: zoomOut, icon: Icon(Icons.zoom_out, color: iconColor)),
+              IconButton(onPressed: scrollLeft, icon: Icon(Icons.arrow_left, color: iconColor)),
+              IconButton(onPressed: scrollRight, icon: Icon(Icons.arrow_right, color: iconColor)),
             ],
           ),
           Expanded(
@@ -79,11 +83,12 @@ class _GraphScreenState extends State<GraphScreen> {
               length: 5,
               child: Column(
                 children: [
-                  const TabBar(
+                  TabBar(
                     isScrollable: true,
-                    labelColor: Colors.green,
-                    unselectedLabelColor: Colors.grey,
-                    tabs: [
+                    labelColor: tabLabelColor,
+                    unselectedLabelColor: unselectedTabColor,
+                    indicatorColor: tabLabelColor,
+                    tabs: const [
                       Tab(text: "pH"),
                       Tab(text: "N"),
                       Tab(text: "P"),
@@ -93,46 +98,46 @@ class _GraphScreenState extends State<GraphScreen> {
                   ),
                   Expanded(
                     child: TabBarView(
-                      physics: const NeverScrollableScrollPhysics(), // disable swipe
+                      physics: const NeverScrollableScrollPhysics(),
                       children: [
                         LineChartWidget(
-                          data: pHReadings,
+                          data: widget.pHReadings,
                           color: Colors.green,
                           label: "pH",
-                          timestamps: timestamps,
+                          timestamps: widget.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: nReadings,
+                          data: widget.nReadings,
                           color: Colors.blue,
                           label: "N",
-                          timestamps: timestamps,
+                          timestamps: widget.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: pReadings,
+                          data: widget.pReadings,
                           color: Colors.orange,
                           label: "P",
-                          timestamps: timestamps,
+                          timestamps: widget.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: kReadings,
+                          data: widget.kReadings,
                           color: Colors.purple,
                           label: "K",
-                          timestamps: timestamps,
+                          timestamps: widget.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         MultiLineChartWidget(
-                          pHData: pHReadings,
-                          nData: nReadings,
-                          pData: pReadings,
-                          kData: kReadings,
-                          timestamps: timestamps,
+                          pHData: widget.pHReadings,
+                          nData: widget.nReadings,
+                          pData: widget.pReadings,
+                          kData: widget.kReadings,
+                          timestamps: widget.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
