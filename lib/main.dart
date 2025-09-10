@@ -1,18 +1,29 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'screens/dashboard_screen.dart';
 
 void main() {
-  runApp(const SoilSensorApp());
+  runApp(MyApp());
 }
 
-class SoilSensorApp extends StatelessWidget {
-  const SoilSensorApp({super.key});
+class MyApp extends StatelessWidget {
+  // ✅ global theme mode notifier
+  static final ValueNotifier<ThemeMode> themeNotifier =
+      ValueNotifier(ThemeMode.system);
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: DashboardScreen(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeNotifier,
+      builder: (context, currentMode, _) {
+        return MaterialApp(
+          title: 'Soil Dashboard',
+          theme: ThemeData.light(),
+          darkTheme: ThemeData.dark(),
+          themeMode: currentMode, // ✅ listen to notifier
+          home: const DashboardScreen(),
+        );
+      },
     );
   }
 }
