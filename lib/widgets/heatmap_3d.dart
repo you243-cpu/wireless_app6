@@ -17,11 +17,13 @@ Future<Uint8List> renderGridToPngBytes(List<List<double>> grid, {int pixelPerCel
   final cellH = height / rows;
 
   double minV = double.infinity, maxV = -double.infinity;
-  for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) {
-    final v = grid[r][c];
-    if (!v.isNaN) {
-      if (v < minV) minV = v;
-      if (v > maxV) maxV = v;
+  for (var r = 0; r < rows; r++) {
+    for (var c = 0; c < cols; c++) {
+      final v = grid[r][c];
+      if (!v.isNaN) {
+        if (v < minV) minV = v;
+        if (v > maxV) maxV = v;
+      }
     }
   }
   if (minV == double.infinity) { minV = 0; maxV = 1; }
@@ -74,6 +76,7 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
   Uint8List? _imageBytes;
   double _minValue = 0;
   double _maxValue = 1;
+  Offset? _lastDrag;
 
   @override
   void initState() {
@@ -143,21 +146,37 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
                           isDark: isDark,
                           axis: Axis.horizontal,
                         ),
-                      )
+                      ),
                     ],
                   ),
                 ),
               ),
               // 3D viewer
               Expanded(
-                child: Container(
-                  color: isDark ? Colors.black : Colors.white,
-                  child: Cube(
-                    onSceneCreated: (Scene scene) {
-                      _scene = scene;
-                      scene.camera.zoom = 10;
-                      if (planeObj != null) scene.world.add(planeObj!);
-                    },
+                child: GestureDetector(
+                  onPanStart: (details) => _lastDrag = details.localPosition,
+                  onPanUpdate: (details) {
+                    if (_lastDrag == null) return;
+                    final dx = details.localPosition.dx - _lastDrag!.dx;
+                    final dy = details.localPosition.dy - _lastDrag!.dy;
+                    _lastDrag = details.localPosition;
+
+                    setState(() {
+                      widget.controller.rotationY += dx * 0.5;
+                      widget.controller.rotationX += dy * 0.5;
+                      _applyControllerRotation();
+                    });
+                  },
+                  onPanEnd: (_) => _lastDrag = null,
+                  child: Container(
+                    color: isDark ? Colors.black : Colors.white,
+                    child: Cube(
+                      onSceneCreated: (Scene scene) {
+                        _scene = scene;
+                        scene.camera.zoom = 10;
+                        if (planeObj != null) scene.world.add(planeObj!);
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -180,7 +199,7 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  "Use the 2D preview or the 3D pane (tap/drag to rotate).",
+                  "Use the 2D preview or drag the 3D pane to rotate.",
                   style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
                 ),
               ),
