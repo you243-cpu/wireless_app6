@@ -1,13 +1,18 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'screens/dashboard_screen.dart';
+import 'providers/csv_data_provider.dart';
 
 void main() {
-  runApp(MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => CSVDataProvider(),
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
-  // ✅ global theme mode notifier
   static final ValueNotifier<ThemeMode> themeNotifier =
       ValueNotifier(ThemeMode.system);
 
@@ -20,7 +25,7 @@ class MyApp extends StatelessWidget {
           title: 'Soil Dashboard',
           theme: ThemeData.light(),
           darkTheme: ThemeData.dark(),
-          themeMode: currentMode, // ✅ listen to notifier
+          themeMode: currentMode,
           home: const DashboardScreen(),
         );
       },
