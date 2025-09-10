@@ -61,8 +61,6 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       end: _range!.end,
       cols: cols,
       rows: rows,
-      data: _getMetricData(_metric),
-      timestamps: widget.timestamps,
     );
 
     setState(() {
