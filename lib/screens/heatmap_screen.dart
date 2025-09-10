@@ -1,3 +1,4 @@
+// lib/screens/heatmap_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../services/heatmap_service.dart';
@@ -33,6 +34,8 @@ class HeatmapScreen extends StatefulWidget {
 
 class _HeatmapScreenState extends State<HeatmapScreen> {
   final HeatmapService _svc = HeatmapService();
+  final Heatmap3DController _cameraController = Heatmap3DController();
+
   String _metric = 'pH';
   DateTimeRange? _range;
   int cols = 40, rows = 40;
@@ -52,14 +55,13 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
 
     if (_range == null) return;
 
-    // 🔹 Ensure parameter name matches HeatmapService.createGrid signature
     List<List<double>> dataGrid = _svc.createGrid(
       metric: _metric,
       start: _range!.start,
       end: _range!.end,
       cols: cols,
       rows: rows,
-      data: _getMetricData(_metric), // <- renamed from readings
+      data: _getMetricData(_metric),
       timestamps: widget.timestamps,
     );
 
@@ -145,7 +147,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       ),
       body: Column(
         children: [
-          // 🔹 Controls
+          // Controls
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Wrap(
@@ -192,23 +194,28 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                   onPressed: () => setState(() => _show3D = !_show3D),
                   child: Text(_show3D ? "Show 2D" : "Show 3D"),
                 ),
+                if (_show3D)
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      _cameraController.reset();
+                      setState(() {}); // triggers rebuild so camera updates
+                    },
+                    icon: const Icon(Icons.reset_tv),
+                    label: const Text("Reset Camera"),
+                  ),
               ],
             ),
           ),
 
-          // 🔹 Display Grid
+          // Display Grid
           Expanded(
             child: _grid.isEmpty
                 ? const Center(child: Text("No grid yet — pick metric and date range"))
                 : _show3D
                     ? Heatmap3DViewer(
                         grid: _grid,
+                        controller: _cameraController,
                         metricLabel: _metric,
-                        onReset: () {
-                          setState(() {
-                            // just triggers rebuild to reset camera
-                          });
-                        },
                       )
                     : SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
