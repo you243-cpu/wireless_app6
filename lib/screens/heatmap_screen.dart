@@ -1,30 +1,13 @@
 // lib/screens/heatmap_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/heatmap_service.dart';
 import '../widgets/heatmap_3d.dart';
 import '../main.dart';
+import '../providers/csv_data_provider.dart';
 
 class HeatmapScreen extends StatefulWidget {
-  final List<double> pHReadings;
-  final List<double> temperatureReadings;
-  final List<double> humidityReadings;
-  final List<double> ecReadings;
-  final List<double> nReadings;
-  final List<double> pReadings;
-  final List<double> kReadings;
-  final List<DateTime> timestamps;
-
-  const HeatmapScreen({
-    super.key,
-    required this.pHReadings,
-    required this.temperatureReadings,
-    required this.humidityReadings,
-    required this.ecReadings,
-    required this.nReadings,
-    required this.pReadings,
-    required this.kReadings,
-    required this.timestamps,
-  });
+  const HeatmapScreen({super.key});
 
   @override
   State<HeatmapScreen> createState() => _HeatmapScreenState();
@@ -35,75 +18,67 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   final Heatmap3DController _cameraController = Heatmap3DController();
 
   String _metric = 'pH';
-  DateTimeRange? _range;
-  double _sliderValue = 1.0; // 0 = start, 1 = latest
+  double _sliderValue = 1.0;
   List<List<double>> _grid = [];
 
-  // Precomputed grid snapshots for smooth slider updates
   final List<DateTime> _timePoints = [];
   final Map<DateTime, List<List<double>>> _gridSnapshots = {};
 
   @override
-  void initState() {
-    super.initState();
-    _initializeHeatmap();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = context.watch<CSVDataProvider>();
+    _initializeHeatmap(provider);
   }
 
-  void _initializeHeatmap() {
+  void _initializeHeatmap(CSVDataProvider provider) {
     final points = <HeatPoint>[];
-    for (int i = 0; i < widget.timestamps.length; i++) {
+    for (int i = 0; i < provider.timestamps.length; i++) {
       points.add(HeatPoint(
-        t: widget.timestamps[i],
-        lat: 0.0, // replace with actual lat if available
-        lon: 0.0, // replace with actual lon if available
-        pH: widget.pHReadings[i],
-        temp: widget.temperatureReadings[i],
-        humidity: widget.humidityReadings[i],
-        ec: widget.ecReadings[i],
-        n: widget.nReadings[i],
-        p: widget.pReadings[i],
-        k: widget.kReadings[i],
+        t: provider.timestamps[i],
+        lat: provider.latitudes[i],
+        lon: provider.longitudes[i],
+        pH: provider.pH[i],
+        temp: provider.temperature[i],
+        humidity: provider.humidity[i],
+        ec: provider.ec[i],
+        n: provider.n[i],
+        p: provider.p[i],
+        k: provider.k[i],
       ));
     }
 
     _svc.setPoints(points);
 
-    if (widget.timestamps.isNotEmpty) {
-      _range = DateTimeRange(start: widget.timestamps.first, end: widget.timestamps.last);
-      _precomputeSnapshots();
-    }
+    _precomputeSnapshots(provider);
   }
 
-  /// Precompute grid snapshots for each timestamp
-  void _precomputeSnapshots() {
+  void _precomputeSnapshots(CSVDataProvider provider) {
     _gridSnapshots.clear();
     _timePoints.clear();
-    for (final t in widget.timestamps) {
-      final grid = _svc.createGrid(
-        metric: _metric,
-        start: widget.timestamps.first,
-        end: t,
-      );
+    for (final t in provider.timestamps) {
+      final grid = _svc.createGrid(metric: _metric, start: provider.timestamps.first, end: t);
       _gridSnapshots[t] = grid;
       _timePoints.add(t);
     }
-    setState(() {
-      _grid = _gridSnapshots[_timePoints.last]!;
-      _sliderValue = 1.0;
-    });
+
+    if (_timePoints.isNotEmpty) {
+      setState(() {
+        _grid = _gridSnapshots[_timePoints.last]!;
+        _sliderValue = 1.0;
+      });
+    }
   }
 
   void _setMetric(String metric) {
     setState(() {
       _metric = metric;
-      _precomputeSnapshots();
     });
   }
 
   void _onSliderChanged(double value) {
     setState(() {
       _sliderValue = value;
-      // Find closest timestamp for slider
       final index = (_timePoints.length * value).clamp(0, _timePoints.length - 1).round();
       final time = _timePoints[index];
       _grid = _gridSnapshots[time]!;
@@ -112,31 +87,33 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<CSVDataProvider>();
     final metrics = ['pH', 'Temperature', 'EC', 'N', 'P', 'K', 'All'];
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (!provider.hasData) {
+      return const Scaffold(
+        body: Center(child: Text("No data available.")),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Heatmap Viewer"),
         actions: [
           IconButton(
-            icon: Icon(
-              MyApp.themeNotifier.value == ThemeMode.dark
-                  ? Icons.dark_mode
-                  : Icons.light_mode,
-            ),
+            icon: Icon(MyApp.themeNotifier.value == ThemeMode.dark
+                ? Icons.dark_mode
+                : Icons.light_mode),
             onPressed: () {
               MyApp.themeNotifier.value =
-                  MyApp.themeNotifier.value == ThemeMode.dark
-                      ? ThemeMode.light
-                      : ThemeMode.dark;
+                  MyApp.themeNotifier.value == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
             },
           ),
         ],
       ),
       body: Column(
         children: [
-          // Metric buttons
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -155,9 +132,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
               }).toList(),
             ),
           ),
-
-          // Timeline slider
-          if (_range != null)
+          if (_timePoints.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
@@ -177,8 +152,6 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                 ],
               ),
             ),
-
-          // 3D Heatmap
           Expanded(
             child: _grid.isEmpty
                 ? const Center(child: Text("No data yet"))
