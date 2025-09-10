@@ -130,34 +130,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
   // Pick CSV file
   Future<void> pickCsvFile() async {
-    final parsed = await CSVService.pickCSV();
-    if (parsed != null) {
-      _updateProvider(parsed);
+    try {
+      final parsed = await CSVService.pickCSV();
+      if (parsed != null) {
+        _updateProvider(parsed);
 
-      //Prepare preview for Snax
-      final numPreview = 3;
-      final totalRows = parsed["timestamps"]!.length;
-      final previewRows = <String>[];
+        final totalRows = parsed["timestamps"]!.length;
+        final previewRows = <String>[];
+        for (int i = 0; i < totalRows && i < 3; i++) {
+          previewRows.add(
+            "Row ${i + 1}: pH=${parsed["pH"]![i]}, Temp=${parsed["temperature"]![i]}, Humidity=${parsed["humidity"]![i]}"
+          );
+        }
 
-      for (int i = 0; i < totalRows && i < numPreview; i++) {
-        previewRows.add(
-          "Row ${i + 1}: pH=${parsed["pH"]![i]}, Temp=${parsed["temperature"]![i]}. Humidity=${parsed["humidity"]![i]}"
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "CSV loaded: $totalRows rows.\n" + previewRows.join("\n"),
+            ),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("No file selected."),
+            duration: Duration(seconds: 3),
+          ),
         );
       }
-      
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            "Loaded $totalRows rows. \n" + previewRows.join("\n"),
-          ),
+          content: Text("Failed to load CSV: $e"),
           duration: const Duration(seconds: 5),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("No CSV selected or failed to load."),
-          duration: Duration(seconds: 3),
         ),
       );
     }
