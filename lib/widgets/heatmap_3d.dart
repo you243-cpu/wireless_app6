@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_cube/flutter_cube.dart';
 import '../services/heatmap_service.dart';
 import 'heatmap_legend.dart';
-import 'heatmap_2d.dart';
 
 Future<Uint8List> renderGridToPngBytes(List<List<double>> grid, {int pixelPerCell = 8}) async {
   final rows = grid.length;
@@ -40,17 +39,28 @@ Future<Uint8List> renderGridToPngBytes(List<List<double>> grid, {int pixelPerCel
   return byteData!.buffer.asUint8List();
 }
 
+/// Controller to manage 3D camera rotation & reset
+class Heatmap3DController {
+  double rotationX = -90;
+  double rotationY = 0;
+
+  void reset() {
+    rotationX = -90;
+    rotationY = 0;
+  }
+}
+
 class Heatmap3DViewer extends StatefulWidget {
   final List<List<double>> grid;
   final double planeSize;
-  final VoidCallback? onReset;
+  final Heatmap3DController controller;
   final String metricLabel;
 
   const Heatmap3DViewer({
     super.key,
     required this.grid,
+    required this.controller,
     this.planeSize = 4.0,
-    this.onReset,
     this.metricLabel = "value",
   });
 
@@ -74,18 +84,31 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
   Future<void> _generateTexture() async {
     if (widget.grid.isEmpty) return;
 
-    _minValue = widget.grid.expand((r) => r).where((v) => !v.isNaN).fold<double>(double.infinity, (p,c)=> c<p?c:p);
-    _maxValue = widget.grid.expand((r) => r).where((v) => !v.isNaN).fold<double>(-double.infinity, (p,c)=> c>p?c:p);
+    final values = widget.grid.expand((r) => r).where((v) => !v.isNaN).toList();
+    _minValue = values.isEmpty ? 0 : values.reduce((a, b) => a < b ? a : b);
+    _maxValue = values.isEmpty ? 1 : values.reduce((a, b) => a > b ? a : b);
 
     final bytes = await renderGridToPngBytes(widget.grid, pixelPerCell: 8);
     setState(() => _imageBytes = bytes);
+
     planeObj = Object(
       name: 'plane',
       scale: Vector3(widget.planeSize, 1, widget.planeSize),
-      rotation: Vector3(-90,0,0),
-      position: Vector3(0,0,0),
+      rotation: Vector3(widget.controller.rotationX, widget.controller.rotationY, 0),
+      position: Vector3(0, 0, 0),
       fileName: null,
     );
+  }
+
+  void _applyControllerRotation() {
+    if (planeObj != null) {
+      planeObj!.rotation.setValues(
+        widget.controller.rotationX,
+        widget.controller.rotationY,
+        0,
+      );
+      _scene.update();
+    }
   }
 
   @override
@@ -141,14 +164,18 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
             ],
           ),
         ),
+        // controls
         Padding(
           padding: const EdgeInsets.all(8),
           child: Row(
             children: [
               ElevatedButton.icon(
-                onPressed: widget.onReset,
+                onPressed: () {
+                  widget.controller.reset();
+                  _applyControllerRotation();
+                },
                 icon: const Icon(Icons.reset_tv),
-                label: const Text("Reset view"),
+                label: const Text("Reset Camera"),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -159,7 +186,7 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
               ),
             ],
           ),
-        )
+        ),
       ],
     );
   }
