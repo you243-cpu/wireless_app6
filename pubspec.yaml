@@ -9,7 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_cube: ^0.0.5
+  flutter_cube: ^0.1.1
   http: ^1.2.2
   fl_chart: ^0.68.0
   percent_indicator: ^4.2.3
