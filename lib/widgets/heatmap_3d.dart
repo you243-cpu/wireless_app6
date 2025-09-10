@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_cube/flutter_cube.dart';
 import '../services/heatmap_service.dart';
 import 'heatmap_2d.dart';
-
 /// Utility: render the 2D grid to an ui.Image (bitmap) then return bytes PNG
 Future<Uint8List> renderGridToPngBytes(List<List<double>> grid, {int pixelPerCell = 8}) async {
   final rows = grid.length;
@@ -18,7 +17,6 @@ Future<Uint8List> renderGridToPngBytes(List<List<double>> grid, {int pixelPerCel
   final cellW = width / cols;
   final cellH = height / rows;
 
-  // compute min/max
   double minV = double.infinity, maxV = -double.infinity;
   for (var r = 0; r < rows; r++) {
     for (var c = 0; c < cols; c++) {
@@ -165,5 +163,5 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
       ],
     );
   }
-}
-
+} 
+// SIX SEVEN!!!!!!!!
