@@ -148,7 +148,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            "Loaded $totalRows rows. \n + previewRows.join("\n"),
+            "Loaded $totalRows rows. \n" + previewRows.join("\n"),
           ),
           duration: const Duration(seconds: 5),
         ),
