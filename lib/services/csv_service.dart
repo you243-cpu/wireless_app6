@@ -26,9 +26,9 @@ class CSVService {
 
   /// Convert CSV rows into structured Map
   static Map<String, List<dynamic>> _toMap(List<List<dynamic>> rows) {
+    List<DateTime> timestamps = [];
     List<double> latitudes = [];
     List<double> longitudes = [];
-    List<DateTime> timestamps = [];
     List<double> pH = [];
     List<double> temperature = [];
     List<double> humidity = [];
@@ -40,10 +40,10 @@ class CSVService {
     for (var i = 1; i < rows.length; i++) {
       try {
         // Expected CSV format:
-        // latitude, longitude, timestamp, pH, temperature, humidity, ec, n, p, k
-        latitudes.add(rows[i][0].toDouble());
-        longitudes.add(rows[i][1].toDouble());
-        timestamps.add(DateTime.parse(rows[i][2].toString()));
+        // timestamp, lat, lon, pH, temperature, humidity, ec, n, p, k
+        timestamps.add(DateTime.parse(rows[i][0].toString()));
+        latitudes.add(rows[i][1].toDouble());
+        longitudes.add(rows[i][2].toDouble());
         pH.add(rows[i][3].toDouble());
         temperature.add(rows[i][4].toDouble());
         humidity.add(rows[i][5].toDouble());
@@ -58,9 +58,9 @@ class CSVService {
     }
 
     return {
+      "timestamps": timestamps,
       "latitudes": latitudes,
       "longitudes": longitudes,
-      "timestamps": timestamps,
       "pH": pH,
       "temperature": temperature,
       "humidity": humidity,
