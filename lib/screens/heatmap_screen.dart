@@ -28,13 +28,16 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   }
 
   Future<void> _loadCsvFromPicker() async {
-    final res = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['csv']);
+    final res = await FilePicker.platform.pickFiles(
+      type: FileType.custom, 
+      allowedExtensions: ['csv']
+    );
     if (res == null) return;
     final path = res.files.single.path!;
     final content = await File(path).readAsString();
     final pts = HeatmapService.parseCsvString(content);
     _svc.setPoints(pts);
-    // default range covering all
+
     if (pts.isNotEmpty) {
       final minT = pts.map((p) => p.t).reduce((a,b) => a.isBefore(b) ? a : b);
       final maxT = pts.map((p) => p.t).reduce((a,b) => a.isAfter(b) ? a : b);
@@ -68,7 +71,9 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
 
   void _pickRange() async {
     if (_svc.points.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Load CSV first")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Load CSV first"))
+      );
       return;
     }
     final minT = _svc.points.map((p) => p.t).reduce((a,b) => a.isBefore(b) ? a : b);
@@ -89,7 +94,9 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final metrics = ['pH','N','P','K','all'];
+    // ✅ Full set of supported metrics
+    final metrics = ['pH', 'Temperature', 'Humidity', 'EC', 'N', 'P', 'K'];
+
     return Scaffold(
       appBar: AppBar(title: const Text("Heatmap Viewer")),
       body: Column(
@@ -97,29 +104,85 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
           // loader + controls
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              ElevatedButton.icon(onPressed: _loadCsvFromPicker, icon: const Icon(Icons.upload_file), label: const Text("Load CSV")),
-              const Text("Metric:"),
-              DropdownButton<String>(value: _metric, items: metrics.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(), onChanged: (v) { if (v!=null) _setMetric(v); }),
-              ElevatedButton(onPressed: _pickRange, child: const Text("Pick Date Range")),
-              const Text("Cols:"),
-              SizedBox(width: 80, child: TextFormField(initialValue: cols.toString(), keyboardType: TextInputType.number, onChanged: (s){ final v=int.tryParse(s); if (v!=null) cols=v; })),
-              const Text("Rows:"),
-              SizedBox(width: 80, child: TextFormField(initialValue: rows.toString(), keyboardType: TextInputType.number, onChanged: (s){ final v=int.tryParse(s); if (v!=null) rows=v; })),
-              ElevatedButton(onPressed: _computeGrid, child: const Text("Rebuild Grid")),
-              ElevatedButton(onPressed: () => setState(()=>_show3D=!_show3D), child: Text(_show3D ? "Show 2D" : "Show 3D")),
-            ]),
+            child: Wrap(
+              spacing: 8, 
+              crossAxisAlignment: WrapCrossAlignment.center, 
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _loadCsvFromPicker, 
+                  icon: const Icon(Icons.upload_file), 
+                  label: const Text("Load CSV")
+                ),
+                const Text("Metric:"),
+                DropdownButton<String>(
+                  value: _metric, 
+                  items: metrics.map((m) => DropdownMenuItem(
+                    value: m, 
+                    child: Text(m)
+                  )).toList(), 
+                  onChanged: (v) { 
+                    if (v!=null) _setMetric(v); 
+                  }
+                ),
+                ElevatedButton(
+                  onPressed: _pickRange, 
+                  child: const Text("Pick Date Range")
+                ),
+                const Text("Cols:"),
+                SizedBox(
+                  width: 80, 
+                  child: TextFormField(
+                    initialValue: cols.toString(), 
+                    keyboardType: TextInputType.number, 
+                    onChanged: (s){ 
+                      final v=int.tryParse(s); 
+                      if (v!=null) cols=v; 
+                    }
+                  )
+                ),
+                const Text("Rows:"),
+                SizedBox(
+                  width: 80, 
+                  child: TextFormField(
+                    initialValue: rows.toString(), 
+                    keyboardType: TextInputType.number, 
+                    onChanged: (s){ 
+                      final v=int.tryParse(s); 
+                      if (v!=null) rows=v; 
+                    }
+                  )
+                ),
+                ElevatedButton(
+                  onPressed: _computeGrid, 
+                  child: const Text("Rebuild Grid")
+                ),
+                ElevatedButton(
+                  onPressed: () => setState(()=>_show3D=!_show3D), 
+                  child: Text(_show3D ? "Show 2D" : "Show 3D")
+                ),
+              ]
+            ),
           ),
 
           Expanded(
             child: _grid.isEmpty
               ? const Center(child: Text("No grid yet — load CSV and pick range"))
               : _show3D
-                ? Heatmap3DViewer(grid: _grid, onReset: () { /* reset camera logic here */ })
+                ? Heatmap3DViewer(
+                    grid: _grid, 
+                    onReset: () {
+                      // TODO: implement camera reset in Heatmap3DViewer
+                    }
+                  )
                 : SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: SingleChildScrollView(
-                      child: Heatmap2D(grid: _grid, cellSize: 8, showGridLines: false, metricLabel: _metric),
+                      child: Heatmap2D(
+                        grid: _grid, 
+                        cellSize: 8, 
+                        showGridLines: false, 
+                        metricLabel: _metric
+                      ),
                     ),
                   ),
           ),
@@ -128,4 +191,3 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     );
   }
 }
-
