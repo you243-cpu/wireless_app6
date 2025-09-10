@@ -7,6 +7,9 @@ class GraphScreen extends StatefulWidget {
   final List<double> nReadings;
   final List<double> pReadings;
   final List<double> kReadings;
+  final List<double> temperatureReadings;
+  final List<double> humidityReadings;
+  final List<double> ecReadings;
   final List<DateTime> timestamps;
 
   const GraphScreen({
@@ -15,6 +18,9 @@ class GraphScreen extends StatefulWidget {
     required this.nReadings,
     required this.pReadings,
     required this.kReadings,
+    required this.temperatureReadings,
+    required this.humidityReadings,
+    required this.ecReadings,
     required this.timestamps,
   });
 
@@ -55,7 +61,6 @@ class _GraphScreenState extends State<GraphScreen> {
     final brightness = Theme.of(context).brightness;
     final isDark = brightness == Brightness.dark;
 
-    // Use theme colors for dark/light
     final tabLabelColor = isDark ? Colors.tealAccent : Colors.green;
     final unselectedTabColor = isDark ? Colors.grey[400]! : Colors.grey[600]!;
     final iconColor = isDark ? Colors.tealAccent : Colors.black87;
@@ -80,7 +85,7 @@ class _GraphScreenState extends State<GraphScreen> {
           ),
           Expanded(
             child: DefaultTabController(
-              length: 5,
+              length: 8, // 5 original + 3 new readings
               child: Column(
                 children: [
                   TabBar(
@@ -93,6 +98,9 @@ class _GraphScreenState extends State<GraphScreen> {
                       Tab(text: "N"),
                       Tab(text: "P"),
                       Tab(text: "K"),
+                      Tab(text: "Temperature"),
+                      Tab(text: "Humidity"),
+                      Tab(text: "EC"),
                       Tab(text: "All"),
                     ],
                   ),
@@ -132,11 +140,38 @@ class _GraphScreenState extends State<GraphScreen> {
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
+                        LineChartWidget(
+                          data: widget.temperatureReadings,
+                          color: Colors.red,
+                          label: "Temperature",
+                          timestamps: widget.timestamps,
+                          zoomLevel: zoomLevel,
+                          scrollIndex: scrollIndex,
+                        ),
+                        LineChartWidget(
+                          data: widget.humidityReadings,
+                          color: Colors.cyan,
+                          label: "Humidity",
+                          timestamps: widget.timestamps,
+                          zoomLevel: zoomLevel,
+                          scrollIndex: scrollIndex,
+                        ),
+                        LineChartWidget(
+                          data: widget.ecReadings,
+                          color: Colors.indigo,
+                          label: "EC",
+                          timestamps: widget.timestamps,
+                          zoomLevel: zoomLevel,
+                          scrollIndex: scrollIndex,
+                        ),
                         MultiLineChartWidget(
                           pHData: widget.pHReadings,
                           nData: widget.nReadings,
                           pData: widget.pReadings,
                           kData: widget.kReadings,
+                          temperatureData: widget.temperatureReadings,
+                          humidityData: widget.humidityReadings,
+                          ecData: widget.ecReadings,
                           timestamps: widget.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
