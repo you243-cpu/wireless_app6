@@ -12,7 +12,7 @@ dependencies:
   provider: ^6.0.5
   flutter_cube:
     git:
-      url: https://github.com/aungpyaephyo/flutter_cube.git
+      url: https://github.com/CainChen/flutter_cube.git
       ref: master
   http: ^1.2.2
   fl_chart: ^0.68.0
