@@ -158,37 +158,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     return normalized;
   }
-
+  
   // Safe provider update
   void _updateProvider(Map<String, List<dynamic>> parsed) {
     try {
       final provider = context.read<CSVDataProvider>();
-
       final normalized = _normalizeKeys(parsed);
-
+  
+      // ✅ Adjusted to match parser keys
       provider.updateData(
         pH: normalized["ph"]!.cast<double>(),
         temperature: normalized["temperature"]!.cast<double>(),
         humidity: normalized["humidity"]!.cast<double>(),
-        ec: normalized["ec"]!.cast<double>(),   // works for ec or EC
+        ec: normalized["ec"]!.cast<double>(),
         n: normalized["n"]!.cast<double>(),
         p: normalized["p"]!.cast<double>(),
         k: normalized["k"]!.cast<double>(),
-        timestamps: normalized["timestamp"]!.cast<DateTime>(),
-        latitudes: normalized["lat"]!.cast<double>(),
-        longitudes: normalized["lon"]!.cast<double>(),
+        timestamps: normalized["timestamps"]!.cast<DateTime>(),
+        latitudes: normalized["latitudes"]!.cast<double>(),
+        longitudes: normalized["longitudes"]!.cast<double>(),
       );
+  
+      _showSnackBar("✅ CSV data loaded successfully!");
     } catch (e) {
-      _showSnackBar("Error updating provider: $e");
-      print("Provider update error: $e");
+      _showSnackBar("❌ Error updating provider:\n$e");
     }
   }
   
-  // Helper: check missing columns
+  // Helper: check missing columns with debug
   List<String> _checkMissingColumns(Map<String, List<dynamic>> parsed) {
     final normalized = _normalizeKeys(parsed);
+  
+      // ✅ Adjusted to what parser really outputs
     final requiredCols = [
-      "timestamp",
+      "timestamps",
       "ph",
       "temperature",
       "humidity",
@@ -196,8 +199,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       "n",
       "p",
       "k",
-      "lat",
-      "lon",
+      "latitudes",
+      "longitudes",
     ];
   
     final missing = <String>[];
@@ -205,7 +208,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!normalized.containsKey(col) || normalized[col] == null) {
         missing.add(col);
       }
-    }  
+    }
+
+    if (missing.isNotEmpty) {
+      _showSnackBar("⚠️ Missing CSV columns:\n${missing.join(", ")}");
+    } else {
+      _showSnackBar("✅ All required CSV columns found!");
+    }
+  
     return missing;
   }
 
