@@ -1,6 +1,4 @@
 // lib/widgets/heatmap_3d.dart
-import 'dart:typed_data';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart' hide Material;
 import 'package:flutter_cube/flutter_cube.dart' hide Vector3;
 import 'package:vector_math/vector_math_64.dart' as vector_math;
@@ -66,6 +64,7 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
     if (widget.grid.isEmpty) {
       heatmapObj = null;
       if (_scene != null) {
+        // Clear all objects from the scene if the grid is empty
         _scene!.world.removeAll();
       }
       return;
@@ -98,11 +97,12 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
           position: vector_math.Vector3(
               (c - cols / 2 + 0.5) * cellScaleX, height / 2, (r - rows / 2 + 0.5) * cellScaleZ),
           scale: vector_math.Vector3(cellScaleX, height, cellScaleZ),
-          materials: [
+        );
+        // The Material property has been moved to a separate addMaterial function
+        cube.addMaterial(
             Material(
-              color: valueToColor(value, widget.minValue, widget.maxValue, widget.metricLabel),
+                color: valueToColor(value, widget.minValue, widget.maxValue, widget.metricLabel),
             ),
-          ],
         );
         rootObj.add(cube);
       }
