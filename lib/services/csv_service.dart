@@ -92,4 +92,11 @@ class CSVService {
 
     return data;
   }
+
+  /// Return the normalized headers from the CSV (first row)
+  static List<String> getHeaders(List<List<dynamic>> rows) {
+    if (rows.isEmpty) return [];
+    return rows.first.map((h) => h.toString().trim().toLowerCase()).toList();
+  }
 }
+
