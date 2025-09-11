@@ -1,13 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'dart:io';
-import 'dart:convert';
-import 'package:path_provider/path_provider.dart';
 import '../services/heatmap_service.dart';
-import '../widgets/heatmap_3d.dart';
 import '../widgets/heatmap_2d.dart';
-import '../main.dart';
-import '../providers/csv_data_provider.dart';
+import '../widgets/heatmap_3d.dart';
 
 class HeatmapScreen extends StatefulWidget {
   const HeatmapScreen({super.key});
@@ -17,220 +12,207 @@ class HeatmapScreen extends StatefulWidget {
 }
 
 class _HeatmapScreenState extends State<HeatmapScreen> {
-  final HeatmapService _svc = HeatmapService();
-
-  String _metric = 'pH';
-  double _sliderValue = 1.0;
-  List<List<double>> _grid = [];
-  bool _show3dView = false; // Default to 2D view
-  String _gltfPath = '';
-
-  final List<DateTime> _timePoints = [];
-  final Map<DateTime, List<List<double>>> _gridSnapshots = {};
-
-  double _minValue = 0;
-  double _maxValue = 1;
+  final heatmapService = HeatmapService();
+  final List<String> metrics = [
+    'pH',
+    'Temperature',
+    'Humidity',
+    'EC',
+    'N',
+    'P',
+    'K',
+    'All'
+  ];
+  String currentMetric = 'pH';
+  DateTime? startTime;
+  DateTime? endTime;
+  bool is3DView = false;
+  bool isLoading = true;
+  List<List<double>>? gridData;
+  double minValue = 0.0;
+  double maxValue = 0.0;
+  String? gltfModelPath;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final provider = context.watch<CSVDataProvider>();
-    _initializeHeatmap(provider);
+  void initState() {
+    super.initState();
+    _loadData();
   }
 
-  void _initializeHeatmap(CSVDataProvider provider) {
-    final points = <HeatPoint>[];
-    for (int i = 0; i < provider.timestamps.length; i++) {
-      points.add(HeatPoint(
-        t: provider.timestamps[i],
-        lat: provider.latitudes[i],
-        lon: provider.longitudes[i],
-        pH: provider.pH[i],
-        temp: provider.temperature[i],
-        humidity: provider.humidity[i],
-        ec: provider.ec[i],
-        n: provider.n[i],
-        p: provider.p[i],
-        k: provider.k[i],
-      ));
-    }
+  Future<void> _loadData() async {
+    try {
+      final points = await HeatmapService.parseCsvAsset('assets/heatmap_data.csv');
+      heatmapService.setPoints(points);
 
-    _svc.setPoints(points);
-    _precomputeSnapshots(provider);
-  }
-
-  Future<void> _precomputeSnapshots(CSVDataProvider provider) async {
-    _gridSnapshots.clear();
-    _timePoints.clear();
-    final allTimestamps = provider.timestamps.toSet().toList()..sort();
-    
-    for (final t in allTimestamps) {
-      final grid = _svc.createGrid(metric: _metric, start: allTimestamps.first, end: t);
-      _gridSnapshots[t] = grid;
-      _timePoints.add(t);
-    }
-    
-    _updateGridAndValues();
-  }
-
-  Future<void> _generateGltfFile(List<List<double>> grid, String metricLabel) async {
-    // This is a placeholder. A full implementation would involve:
-    // 1. Creating a GLTF object programmatically from your grid data.
-    // 2. Exporting the GLTF object to a file.
-    // 3. Getting the path to the saved file.
-    
-    // As a temporary solution, we create a placeholder file to prevent build errors.
-    // A full GLTF generation from your data is a complex task.
-    final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/heatmap.gltf');
-    await file.writeAsString(jsonEncode({'asset': {'version': '2.0'}}));
-
-    setState(() {
-      _gltfPath = file.path;
-    });
-  }
-
-  void _updateGridAndValues() {
-    if (_timePoints.isNotEmpty) {
-      final index = (_timePoints.length * _sliderValue).clamp(0, _timePoints.length - 1).round();
-      final time = _timePoints[index];
-      final newGrid = _gridSnapshots[time]!;
-      
-      double minV = double.infinity, maxV = -double.infinity;
-      final values = newGrid.expand((r) => r).where((v) => !v.isNaN).toList();
-      if (values.isNotEmpty) {
-        minV = values.reduce((a, b) => a < b ? a : b);
-        maxV = values.reduce((a, b) => a > b ? a : b);
-      } else {
-        minV = 0;
-        maxV = 1;
+      if (points.isNotEmpty) {
+        setState(() {
+          startTime = points.first.t;
+          endTime = points.last.t;
+          isLoading = false;
+        });
+        _updateGridAndValues();
       }
-      
+    } catch (e) {
+      // In a real app, you would handle this gracefully (e.g., show an error message).
+      print('Error loading data: $e');
       setState(() {
-        _grid = newGrid;
-        // Avoid setting min and max to the same value to prevent a division by zero error in the legend.
-        if (minV == maxV) {
-          _minValue = minV - 0.1;
-          _maxValue = maxV + 0.1;
-        } else {
-          _minValue = minV;
-          _maxValue = maxV;
-        }
+        isLoading = false;
       });
     }
   }
 
-  void _setMetric(String metric) {
-    setState(() {
-      _metric = metric;
-      _precomputeSnapshots(context.read<CSVDataProvider>());
-    });
+  void _updateGridAndValues() {
+    if (heatmapService.points.isEmpty || startTime == null || endTime == null) {
+      setState(() {
+        gridData = [];
+        minValue = 0;
+        maxValue = 0;
+      });
+      return;
+    }
+
+    final newGrid = heatmapService.createGrid(
+      metric: currentMetric,
+      start: startTime!,
+      end: endTime!,
+    );
+
+    // Compute min/max values from the grid, ignoring NaN
+    final allValues = newGrid.expand((row) => row).where((v) => !v.isNaN).toList();
+    if (allValues.isNotEmpty) {
+      final min = allValues.reduce((a, b) => a < b ? a : b);
+      final max = allValues.reduce((a, b) => a > b ? a : b);
+
+      setState(() {
+        gridData = newGrid;
+        minValue = min;
+        maxValue = max;
+      });
+
+      // Handle cases where min and max are the same to avoid division by zero
+      if (minValue == maxValue) {
+        minValue = minValue - 0.01;
+        maxValue = maxValue + 0.01;
+      }
+    } else {
+      setState(() {
+        gridData = newGrid;
+        minValue = 0;
+        maxValue = 0;
+      });
+    }
   }
 
-  void _onSliderChanged(double value) {
-    setState(() {
-      _sliderValue = value;
+  void _onMetricChanged(String? newMetric) {
+    if (newMetric != null) {
+      setState(() {
+        currentMetric = newMetric;
+      });
       _updateGridAndValues();
-    });
+    }
+  }
+
+  Future<void> _selectDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDateRange: DateTimeRange(
+        start: startTime ?? DateTime.now(),
+        end: endTime ?? DateTime.now(),
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        startTime = picked.start;
+        endTime = picked.end;
+      });
+      _updateGridAndValues();
+    }
   }
 
   void _toggleView() {
     setState(() {
-      _show3dView = !_show3dView;
-      if (_show3dView) {
-        // Only attempt to generate the file when needed
-        _generateGltfFile(_grid, _metric);
-      }
+      is3DView = !is3DView;
     });
+
+    if (is3DView) {
+      // In a real app, you would generate the GLTF model here
+      // and set the gltfModelPath.
+      // For this example, we will just simulate a path.
+      gltfModelPath = 'assets/simulated_3d_model.gltf';
+    } else {
+      gltfModelPath = null;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<CSVDataProvider>();
-    final metrics = ['pH', 'Temperature', 'EC', 'N', 'P', 'K', 'All'];
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    if (!provider.hasData) {
-      return const Scaffold(
-        body: Center(child: Text("No data available.")),
-      );
-    }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Heatmap Viewer"),
+        title: const Text('Heatmap Viewer'),
+        backgroundColor: isDark ? Colors.grey[800] : Colors.blue,
         actions: [
           IconButton(
-            icon: Icon(_show3dView ? Icons.view_in_ar : Icons.grid_on),
+            icon: Icon(is3DView ? Icons.view_agenda : Icons.view_in_ar),
             onPressed: _toggleView,
-            tooltip: _show3dView ? 'Switch to 2D View' : 'Switch to 3D View',
-          ),
-          IconButton(
-            icon: Icon(MyApp.themeNotifier.value == ThemeMode.dark
-                ? Icons.dark_mode
-                : Icons.light_mode),
-            onPressed: () {
-              MyApp.themeNotifier.value = MyApp.themeNotifier.value == ThemeMode.dark
-                  ? ThemeMode.light
-                  : ThemeMode.dark;
-            },
+            tooltip: 'Toggle 2D/3D View',
           ),
         ],
       ),
-      body: Column(
-        children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: metrics.map((m) {
-                final isSelected = _metric == m;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isSelected ? Colors.blue : null,
-                    ),
-                    onPressed: () => _setMetric(m),
-                    child: Text(m),
-                  );
-                );
-              }).toList(),
-            ),
-          ),
-          if (_timePoints.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  Slider(
-                    value: _sliderValue,
-                    min: 0.0,
-                    max: 1.0,
-                    divisions: _timePoints.length > 1 ? _timePoints.length - 1 : 1,
-                    label:
-                        "${_timePoints[(_timePoints.length * _sliderValue).clamp(0, _timePoints.length - 1).round()]}".split(' ')[0],
-                    onChanged: _onSliderChanged,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      DropdownButton<String>(
+                        value: currentMetric,
+                        items: metrics.map((String metric) {
+                          return DropdownMenuItem<String>(
+                            value: metric,
+                            child: Text(metric),
+                          );
+                        }).toList(),
+                        onChanged: _onMetricChanged,
+                      ),
+                      const SizedBox(width: 16),
+                      ElevatedButton(
+                        onPressed: _selectDateRange,
+                        child: Text(
+                          startTime != null && endTime != null
+                              ? '${startTime!.year}-${startTime!.month}-${startTime!.day} to ${endTime!.year}-${endTime!.month}-${endTime!.day}'
+                              : 'Select Date Range',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    "Showing data up to: ${_timePoints[(_timePoints.length * _sliderValue).clamp(0, _timePoints.length - 1).round()]}",
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: is3DView
+                        ? Center(
+                            child: Text("3D View is not yet implemented"),
+                          )
+                        : (gridData != null && gridData!.isNotEmpty)
+                            ? Heatmap2D(
+                                grid: gridData!,
+                                metricLabel: currentMetric,
+                                minValue: minValue,
+                                maxValue: maxValue,
+                              )
+                            : const Center(
+                                child: Text("No data to display."),
+                              ),
                   ),
                 ],
               ),
             ),
-          Expanded(
-            child: _grid.isEmpty
-                ? const Center(child: Text("No data yet"))
-                : _show3dView
-                    ? const Center(child: Text("3D view is not yet implemented."))
-                    : Heatmap2D(
-                        grid: _grid,
-                        metricLabel: _metric,
-                        minValue: _minValue,
-                        maxValue: _maxValue,
-                      ),
-          ),
-        ],
-      ),
     );
   }
 }
