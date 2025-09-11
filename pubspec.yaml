@@ -4,13 +4,16 @@ publish_to: 'none'
 version: 0.1.1
 
 environment:
-  sdk: ^3.9.0
+  sdk: '>=3.9.0 <4.0.0'
   
 dependencies:
   flutter:
     sdk: flutter
   provider: ^6.0.5
-  flutter_cube: ^0.1.1
+  flutter_cube:
+    git:
+      url: https://github.com/aungpyaephyo/flutter_cube.git
+      ref: master
   http: ^1.2.2
   fl_chart: ^0.68.0
   percent_indicator: ^4.2.3
