@@ -6,7 +6,7 @@ class HeatmapLegend extends StatelessWidget {
   final double maxValue;
   final String metricLabel;
   final bool isDark;
-  final Axis axis; // vertical or horizontal
+  final Axis axis;
   final double thickness;
 
   const HeatmapLegend({
@@ -21,16 +21,13 @@ class HeatmapLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determine the optimal range for the current metric
     final optimalRange = optimalRanges[metricLabel] ?? [minValue, maxValue];
     final optimalMin = optimalRange[0];
     final optimalMax = optimalRange[1];
 
-    // Calculate the stops for the gradient based on the value ranges
     final blueStop = (optimalMin - minValue) / (maxValue - minValue);
     final redStop = (optimalMax - minValue) / (maxValue - minValue);
 
-    // Clamp the stops to be within [0, 1] and sort them
     final stops = [
       0.0,
       blueStop.clamp(0.0, 1.0),
@@ -39,12 +36,11 @@ class HeatmapLegend extends StatelessWidget {
     ];
     stops.sort();
 
-    // Generate colors for the gradient dynamically
     final gradientColors = [
-      Colors.blue, // Min value is blue
-      Colors.green, // Value approaches optimal, transitioning to green
-      Colors.green, // Value leaves optimal, transitioning from green
-      Colors.red, // Max value is red
+      Colors.blue,
+      Colors.green,
+      Colors.green,
+      Colors.red,
     ];
 
     if (axis == Axis.vertical) {
