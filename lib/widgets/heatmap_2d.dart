@@ -110,3 +110,4 @@ class _HeatmapPainter extends CustomPainter {
       old.minValue != minValue ||
       old.maxValue != maxValue;
 }
+```eof
