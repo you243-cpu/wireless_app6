@@ -13,7 +13,7 @@ class Heatmap2D extends StatelessWidget {
   const Heatmap2D({
     super.key,
     required this.grid,
-    this.showGridLines = true, // Set to true to make the grid visible
+    this.showGridLines = true,
     required this.metricLabel,
     required this.minValue,
     required this.maxValue,
@@ -82,7 +82,6 @@ class _HeatmapPainter extends CustomPainter {
     final cols = grid[0].length;
     final paint = Paint();
 
-    // Calculate cell size dynamically
     final cellWidth = size.width / cols;
     final cellHeight = size.height / rows;
 
