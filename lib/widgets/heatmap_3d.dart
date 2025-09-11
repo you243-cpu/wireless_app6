@@ -1,7 +1,9 @@
+// lib/widgets/heatmap_3d.dart
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:flutter/material.dart';
-import 'package:flutter_cube/flutter_cube.dart';
+import 'package:flutter/material.dart' hide Material; // Hiding Flutter's Material to prevent conflict
+import 'package:flutter_cube/flutter_cube.dart' hide Vector3; // Hiding Flutter_cube's Vector3 to use the one from vector_math
+import 'package:vector_math/vector_math.dart' as vector_math;
 import '../services/heatmap_service.dart';
 import 'heatmap_legend.dart';
 
@@ -68,12 +70,13 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
     final cols = widget.grid[0].length;
     final rootObj = Object(
       name: 'heatmap_root',
-      rotation: Vector3(widget.controller.rotationX, widget.controller.rotationY, 0),
+      rotation: vector_math.Vector3(widget.controller.rotationX, widget.controller.rotationY, 0),
     );
 
     final cellScaleX = widget.planeSize / cols;
     final cellScaleZ = widget.planeSize / rows;
-    final minHeight = 0.1;
+    const minHeight = 0.1;
+    const maxHeight = 2.0;
 
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
@@ -83,29 +86,28 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
         // Normalize value to a height, clamped to a reasonable range
         final normalizedValue =
             ((value - widget.minValue) / (widget.maxValue - widget.minValue)).clamp(0.0, 1.0);
-        final height = normalizedValue * widget.planeSize * 0.5 + minHeight;
+        final height = normalizedValue * maxHeight + minHeight;
 
         final cube = Object(
           name: 'cell_$r\_$c',
           fileName: 'assets/models/cube.obj', // Ensure you have a simple cube model in assets/models/
-          position: Vector3(
+          position: vector_math.Vector3(
               (c - cols / 2 + 0.5) * cellScaleX, height / 2, (r - rows / 2 + 0.5) * cellScaleZ),
-          scale: Vector3(cellScaleX, height, cellScaleZ),
-          materials: [
-            Material(
-              diffuse: valueToColor(value, widget.minValue, widget.maxValue, widget.metricLabel),
-            )
-          ],
+          scale: vector_math.Vector3(cellScaleX, height, cellScaleZ),
+          material: Material(
+            diffuse: valueToColor(value, widget.minValue, widget.maxValue, widget.metricLabel),
+          ),
         );
         rootObj.add(cube);
       }
     }
     setState(() {
-      heatmapObj = rootObj;
       if (_scene != null) {
+        // Clear previous objects and add the new one
         _scene!.world.removeAll();
-        _scene!.world.add(heatmapObj!);
+        _scene!.world.add(rootObj);
       }
+      heatmapObj = rootObj;
     });
   }
 
