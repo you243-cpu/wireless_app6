@@ -1,6 +1,8 @@
 // lib/services/heatmap_service.dart
 import 'dart:math';
+import 'dart:ui';
 import 'package:csv/csv.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 /// A single sensor measurement
@@ -194,5 +196,38 @@ class HeatmapService {
       }
     }
     return grid;
+  }
+}
+
+/// Optimal value ranges for different metrics, used for the green center of the legend.
+const Map<String, List<double>> optimalRanges = {
+  'pH': [6.0, 7.0],
+  'Temperature': [18.0, 24.0], // in Celsius
+  'EC': [1.0, 2.5], // Siemens/meter
+  'N': [1.0, 2.0], // mg/L
+  'P': [0.15, 0.3], // mg/L
+  'K': [0.5, 1.0], // mg/L
+  'All': [0.5, 1.0], // arbitrary for 'all'
+};
+
+/// Convert numeric value to color (blue -> green -> red gradient)
+Color valueToColor(double value, double min, double max, String metric) {
+  if (value.isNaN) return Colors.transparent;
+
+  final optimalRange = optimalRanges[metric] ?? [min, max];
+  final optimalMin = optimalRange[0];
+  final optimalMax = optimalRange[1];
+
+  if (value >= optimalMin && value <= optimalMax) {
+    // Value is in the optimal range (green)
+    return Colors.green;
+  } else if (value < optimalMin) {
+    // Value is too low (blue -> green)
+    final t = ((value - min) / (optimalMin - min)).clamp(0.0, 1.0);
+    return Color.lerp(Colors.blue, Colors.green, t)!;
+  } else {
+    // Value is too high (green -> red)
+    final t = ((value - optimalMax) / (max - optimalMax)).clamp(0.0, 1.0);
+    return Color.lerp(Colors.green, Colors.red, t)!;
   }
 }
