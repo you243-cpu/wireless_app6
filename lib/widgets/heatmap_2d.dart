@@ -1,28 +1,24 @@
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/heatmap_service.dart';
 import 'heatmap_legend.dart';
-
-Color valueToColor(double v, double min, double max) {
-  if (v.isNaN) return Colors.transparent;
-  final t = ((v - min) / (max - min)).clamp(0.0, 1.0);
-  if (t < 0.33) return Color.lerp(Colors.blue, Colors.green, t / 0.33)!;
-  if (t < 0.66) return Color.lerp(Colors.green, Colors.yellow, (t - 0.33) / 0.33)!;
-  return Color.lerp(Colors.yellow, Colors.red, (t - 0.66) / 0.34)!;
-}
 
 class Heatmap2D extends StatelessWidget {
   final List<List<double>> grid;
   final double cellSize;
   final bool showGridLines;
   final String metricLabel;
+  final double minValue;
+  final double maxValue;
 
   const Heatmap2D({
     super.key,
     required this.grid,
     this.cellSize = 10,
     this.showGridLines = false,
-    this.metricLabel = "value",
+    required this.metricLabel,
+    required this.minValue,
+    required this.maxValue,
   });
 
   @override
@@ -30,35 +26,26 @@ class Heatmap2D extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (grid.isEmpty) {
-      return Center(child: Text("No data", style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)));
+      return Center(
+          child: Text("No data",
+              style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)));
     }
 
     final rows = grid.length;
     final cols = grid[0].length;
 
-    double minV = double.infinity, maxV = -double.infinity;
-    for (var r = 0; r < rows; r++) {
-      for (var c = 0; c < cols; c++) {
-        final v = grid[r][c];
-        if (!v.isNaN) {
-          if (v < minV) minV = v;
-          if (v > maxV) maxV = v;
-        }
-      }
-    }
-    if (minV == double.infinity) {
-      minV = 0;
-      maxV = 1;
-    }
-
     return Row(
       children: [
         Expanded(
-          child: SizedBox(
-            width: cols * cellSize,
-            height: rows * cellSize,
-            child: CustomPaint(
-              painter: _HeatmapPainter(grid, cellSize, showGridLines, isDark),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: cols * cellSize,
+              height: rows * cellSize,
+              child: CustomPaint(
+                painter: _HeatmapPainter(
+                    grid, cellSize, showGridLines, isDark, metricLabel, minValue, maxValue),
+              ),
             ),
           ),
         ),
@@ -67,8 +54,8 @@ class Heatmap2D extends StatelessWidget {
           height: rows * cellSize,
           width: 60,
           child: HeatmapLegend(
-            minValue: minV,
-            maxValue: maxV,
+            minValue: minValue,
+            maxValue: maxValue,
             metricLabel: metricLabel,
             isDark: isDark,
             axis: Axis.vertical,
@@ -84,8 +71,12 @@ class _HeatmapPainter extends CustomPainter {
   final double cellSize;
   final bool showGridLines;
   final bool isDark;
+  final String metricLabel;
+  final double minValue;
+  final double maxValue;
 
-  _HeatmapPainter(this.grid, this.cellSize, this.showGridLines, this.isDark);
+  _HeatmapPainter(this.grid, this.cellSize, this.showGridLines, this.isDark,
+      this.metricLabel, this.minValue, this.maxValue);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -95,7 +86,7 @@ class _HeatmapPainter extends CustomPainter {
 
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
-        paint.color = valueToColor(grid[r][c], _minVal(), _maxVal());
+        paint.color = valueToColor(grid[r][c], minValue, maxValue, metricLabel);
         final rect = Rect.fromLTWH(c * cellSize, r * cellSize, cellSize, cellSize);
         canvas.drawRect(rect, paint);
 
@@ -109,18 +100,12 @@ class _HeatmapPainter extends CustomPainter {
     }
   }
 
-  double _minVal() {
-    double minV = double.infinity;
-    for (var r in grid) for (var c in r) if (!c.isNaN && c < minV) minV = c;
-    return minV == double.infinity ? 0 : minV;
-  }
-
-  double _maxVal() {
-    double maxV = -double.infinity;
-    for (var r in grid) for (var c in r) if (!c.isNaN && c > maxV) maxV = c;
-    return maxV == -double.infinity ? 1 : maxV;
-  }
-
   @override
-  bool shouldRepaint(covariant _HeatmapPainter old) => old.grid != grid || old.cellSize != cellSize || old.isDark != isDark;
+  bool shouldRepaint(covariant _HeatmapPainter old) =>
+      old.grid != grid ||
+      old.cellSize != cellSize ||
+      old.isDark != isDark ||
+      old.metricLabel != metricLabel ||
+      old.minValue != minValue ||
+      old.maxValue != maxValue;
 }
