@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/heatmap_service.dart';
 import '../widgets/heatmap_3d.dart';
+import '../widgets/heatmap_2d.dart';
 import '../main.dart';
 import '../providers/csv_data_provider.dart';
 
@@ -20,9 +21,13 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   String _metric = 'pH';
   double _sliderValue = 1.0;
   List<List<double>> _grid = [];
+  bool _show3dView = true;
 
   final List<DateTime> _timePoints = [];
   final Map<DateTime, List<List<double>>> _gridSnapshots = {};
+
+  double _minValue = 0;
+  double _maxValue = 1;
 
   @override
   void didChangeDependencies() {
@@ -49,23 +54,43 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     }
 
     _svc.setPoints(points);
-
     _precomputeSnapshots(provider);
   }
 
   void _precomputeSnapshots(CSVDataProvider provider) {
     _gridSnapshots.clear();
     _timePoints.clear();
-    for (final t in provider.timestamps) {
-      final grid = _svc.createGrid(metric: _metric, start: provider.timestamps.first, end: t);
+    final allTimestamps = provider.timestamps.toSet().toList()..sort();
+    
+    for (final t in allTimestamps) {
+      final grid = _svc.createGrid(metric: _metric, start: allTimestamps.first, end: t);
       _gridSnapshots[t] = grid;
       _timePoints.add(t);
     }
+    
+    _updateGridAndValues();
+  }
 
+  void _updateGridAndValues() {
     if (_timePoints.isNotEmpty) {
+      final index = (_timePoints.length * _sliderValue).clamp(0, _timePoints.length - 1).round();
+      final time = _timePoints[index];
+      final newGrid = _gridSnapshots[time]!;
+
+      double minV = double.infinity, maxV = -double.infinity;
+      final values = newGrid.expand((r) => r).where((v) => !v.isNaN).toList();
+      if (values.isNotEmpty) {
+        minV = values.reduce((a, b) => a < b ? a : b);
+        maxV = values.reduce((a, b) => a > b ? a : b);
+      } else {
+        minV = 0;
+        maxV = 1;
+      }
+      
       setState(() {
-        _grid = _gridSnapshots[_timePoints.last]!;
-        _sliderValue = 1.0;
+        _grid = newGrid;
+        _minValue = minV;
+        _maxValue = maxV;
       });
     }
   }
@@ -73,15 +98,20 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   void _setMetric(String metric) {
     setState(() {
       _metric = metric;
+      _precomputeSnapshots(context.read<CSVDataProvider>());
     });
   }
 
   void _onSliderChanged(double value) {
     setState(() {
       _sliderValue = value;
-      final index = (_timePoints.length * value).clamp(0, _timePoints.length - 1).round();
-      final time = _timePoints[index];
-      _grid = _gridSnapshots[time]!;
+      _updateGridAndValues();
+    });
+  }
+
+  void _toggleView() {
+    setState(() {
+      _show3dView = !_show3dView;
     });
   }
 
@@ -102,12 +132,18 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         title: const Text("Heatmap Viewer"),
         actions: [
           IconButton(
+            icon: Icon(_show3dView ? Icons.view_in_ar : Icons.grid_on),
+            onPressed: _toggleView,
+            tooltip: _show3dView ? 'Switch to 2D View' : 'Switch to 3D View',
+          ),
+          IconButton(
             icon: Icon(MyApp.themeNotifier.value == ThemeMode.dark
                 ? Icons.dark_mode
                 : Icons.light_mode),
             onPressed: () {
-              MyApp.themeNotifier.value =
-                  MyApp.themeNotifier.value == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+              MyApp.themeNotifier.value = MyApp.themeNotifier.value == ThemeMode.dark
+                  ? ThemeMode.light
+                  : ThemeMode.dark;
             },
           ),
         ],
@@ -141,7 +177,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                     value: _sliderValue,
                     min: 0.0,
                     max: 1.0,
-                    divisions: _timePoints.length - 1,
+                    divisions: _timePoints.length > 1 ? _timePoints.length - 1 : 1,
                     label:
                         "${_timePoints[(_timePoints.length * _sliderValue).clamp(0, _timePoints.length - 1).round()]}".split(' ')[0],
                     onChanged: _onSliderChanged,
@@ -155,11 +191,20 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
           Expanded(
             child: _grid.isEmpty
                 ? const Center(child: Text("No data yet"))
-                : Heatmap3DViewer(
-                    grid: _grid,
-                    controller: _cameraController,
-                    metricLabel: _metric,
-                  ),
+                : _show3dView
+                    ? Heatmap3DViewer(
+                        grid: _grid,
+                        controller: _cameraController,
+                        metricLabel: _metric,
+                        minValue: _minValue,
+                        maxValue: _maxValue,
+                      )
+                    : Heatmap2D(
+                        grid: _grid,
+                        metricLabel: _metric,
+                        minValue: _minValue,
+                        maxValue: _maxValue,
+                      ),
           ),
         ],
       ),
