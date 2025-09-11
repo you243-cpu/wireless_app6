@@ -160,4 +160,3 @@ Color valueToColor(double value, double minValue, double maxValue, String metric
     return Color.lerp(Colors.green, Colors.red, progress)!;
   }
 }
-```eof
