@@ -24,49 +24,72 @@ class CSVService {
     return null;
   }
 
-  /// Convert CSV rows into structured Map
+  /// Convert CSV rows into structured Map with dynamic header detection
   static Map<String, List<dynamic>> _toMap(List<List<dynamic>> rows) {
-    List<DateTime> timestamps = [];
-    List<double> latitudes = [];
-    List<double> longitudes = [];
-    List<double> pH = [];
-    List<double> temperature = [];
-    List<double> humidity = [];
-    List<double> ec = [];
-    List<double> n = [];
-    List<double> p = [];
-    List<double> k = [];
+    if (rows.isEmpty) return {};
 
-    // skip header row
+    // First row is header
+    final headers = rows.first.map((h) => h.toString().trim().toLowerCase()).toList();
+
+    // Map of columnName → list of values
+    final Map<String, List<dynamic>> data = {
+      "timestamps": [],
+      "latitudes": [],
+      "longitudes": [],
+      "pH": [],
+      "temperature": [],
+      "humidity": [],
+      "ec": [],
+      "N": [],
+      "P": [],
+      "K": [],
+    };
+
+    // Helper to get index of a header safely
+    int? idx(String name) {
+      return headers.contains(name) ? headers.indexOf(name) : null;
+    }
+
+    // Iterate over data rows
     for (var i = 1; i < rows.length; i++) {
+      final row = rows[i];
       try {
-        timestamps.add(DateTime.parse(rows[i][0].toString()));
-        latitudes.add(double.parse(rows[i][1].toString()));
-        longitudes.add(double.parse(rows[i][2].toString()));
-        pH.add(double.parse(rows[i][3].toString()));
-        temperature.add(double.parse(rows[i][4].toString()));
-        humidity.add(double.parse(rows[i][5].toString()));
-        ec.add(double.parse(rows[i][6].toString()));
-        n.add(double.parse(rows[i][7].toString()));
-        p.add(double.parse(rows[i][8].toString()));
-        k.add(double.parse(rows[i][9].toString()));
+        if (idx("timestamp") != null) {
+          data["timestamps"]!.add(DateTime.parse(row[idx("timestamp")!].toString()));
+        }
+        if (idx("lat") != null) {
+          data["latitudes"]!.add(row[idx("lat")!].toDouble());
+        }
+        if (idx("lon") != null) {
+          data["longitudes"]!.add(row[idx("lon")!].toDouble());
+        }
+        if (idx("ph") != null) {
+          data["pH"]!.add(row[idx("ph")!].toDouble());
+        }
+        if (idx("temperature") != null) {
+          data["temperature"]!.add(row[idx("temperature")!].toDouble());
+        }
+        if (idx("humidity") != null) {
+          data["humidity"]!.add(row[idx("humidity")!].toDouble());
+        }
+        if (idx("ec") != null) {
+          data["ec"]!.add(row[idx("ec")!].toDouble());
+        }
+        if (idx("n") != null) {
+          data["N"]!.add(row[idx("n")!].toDouble());
+        }
+        if (idx("p") != null) {
+          data["P"]!.add(row[idx("p")!].toDouble());
+        }
+        if (idx("k") != null) {
+          data["K"]!.add(row[idx("k")!].toDouble());
+        }
       } catch (e) {
-        print("Skipping bad row $i: $e");
+        // Skip bad rows gracefully
         continue;
       }
     }
 
-    return {
-      "timestamps": timestamps,
-      "latitudes": latitudes,
-      "longitudes": longitudes,
-      "pH": pH,
-      "temperature": temperature,
-      "humidity": humidity,
-      "EC": ec, // 🔑 normalize key to "EC"
-      "N": n,
-      "P": p,
-      "K": k,
-    };
+    return data;
   }
 }
