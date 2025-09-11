@@ -36,4 +36,3 @@ class Heatmap3DViewer extends StatelessWidget {
     );
   }
 }
-```eof
