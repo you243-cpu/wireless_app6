@@ -46,6 +46,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
 
       if (points.isNotEmpty) {
         setState(() {
+          // Set initial timeline to the full range of the data
           startTime = points.first.t;
           endTime = points.last.t;
           isLoading = false;
@@ -53,7 +54,6 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         _updateGridAndValues();
       }
     } catch (e) {
-      // In a real app, you would handle this gracefully (e.g., show an error message).
       print('Error loading data: $e');
       setState(() {
         isLoading = false;
@@ -77,7 +77,6 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       end: endTime!,
     );
 
-    // Compute min/max values from the grid, ignoring NaN
     final allValues = newGrid.expand((row) => row).where((v) => !v.isNaN).toList();
     if (allValues.isNotEmpty) {
       final min = allValues.reduce((a, b) => a < b ? a : b);
@@ -89,7 +88,6 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         maxValue = max;
       });
 
-      // Handle cases where min and max are the same to avoid division by zero
       if (minValue == maxValue) {
         minValue = minValue - 0.01;
         maxValue = maxValue + 0.01;
@@ -103,31 +101,43 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     }
   }
 
-  void _onMetricChanged(String? newMetric) {
-    if (newMetric != null) {
-      setState(() {
-        currentMetric = newMetric;
-      });
-      _updateGridAndValues();
-    }
+  void _onMetricChanged(String newMetric) {
+    setState(() {
+      currentMetric = newMetric;
+    });
+    _updateGridAndValues();
   }
 
   Future<void> _selectDateRange() async {
-    final picked = await showDateRangePicker(
+    // Show date picker first
+    final pickedDate = await showDatePicker(
       context: context,
       firstDate: DateTime(2000),
       lastDate: DateTime.now().add(const Duration(days: 365)),
-      initialDateRange: DateTimeRange(
-        start: startTime ?? DateTime.now(),
-        end: endTime ?? DateTime.now(),
-      ),
+      initialDate: startTime ?? DateTime.now(),
     );
-    if (picked != null) {
-      setState(() {
-        startTime = picked.start;
-        endTime = picked.end;
-      });
-      _updateGridAndValues();
+
+    if (pickedDate != null) {
+      // Then show time picker
+      final pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(startTime ?? DateTime.now()),
+      );
+
+      if (pickedTime != null) {
+        final newStartTime = DateTime(
+          pickedDate.year,
+          pickedDate.month,
+          pickedDate.day,
+          pickedTime.hour,
+          pickedTime.minute,
+        );
+        setState(() {
+          startTime = newStartTime;
+          endTime = newStartTime.add(const Duration(hours: 1)); // Set a default end time
+        });
+        _updateGridAndValues();
+      }
     }
   }
 
@@ -137,9 +147,6 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     });
 
     if (is3DView) {
-      // In a real app, you would generate the GLTF model here
-      // and set the gltfModelPath.
-      // For this example, we will just simulate a path.
       gltfModelPath = 'assets/simulated_3d_model.gltf';
     } else {
       gltfModelPath = null;
@@ -168,36 +175,54 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      DropdownButton<String>(
-                        value: currentMetric,
-                        items: metrics.map((String metric) {
-                          return DropdownMenuItem<String>(
-                            value: metric,
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: metrics.map((metric) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                          child: ElevatedButton(
+                            onPressed: () => _onMetricChanged(metric),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: currentMetric == metric
+                                  ? Colors.blue.shade800
+                                  : Colors.grey.shade600,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
                             child: Text(metric),
-                          );
-                        }).toList(),
-                        onChanged: _onMetricChanged,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _selectDateRange,
+                    icon: const Icon(Icons.date_range),
+                    label: Text(
+                      startTime != null && endTime != null
+                          ? 'Viewing Data from ${startTime!.toString().split('.')[0]} to ${endTime!.toString().split('.')[0]}'
+                          : 'Select Date & Time Range',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      const SizedBox(width: 16),
-                      ElevatedButton(
-                        onPressed: _selectDateRange,
-                        child: Text(
-                          startTime != null && endTime != null
-                              ? '${startTime!.year}-${startTime!.month}-${startTime!.day} to ${endTime!.year}-${endTime!.month}-${endTime!.day}'
-                              : 'Select Date Range',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Expanded(
                     child: is3DView
-                        ? Center(
-                            child: Text("3D View is not yet implemented"),
+                        ? const Center(
+                            child: Text(
+                              "A functional 3D viewer is not supported in this environment.",
+                              textAlign: TextAlign.center,
+                            ),
                           )
                         : (gridData != null && gridData!.isNotEmpty)
                             ? Heatmap2D(
@@ -207,7 +232,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                                 maxValue: maxValue,
                               )
                             : const Center(
-                                child: Text("No data to display."),
+                                child: Text("No data to display for the selected metric and time range."),
                               ),
                   ),
                 ],
