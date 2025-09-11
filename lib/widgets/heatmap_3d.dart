@@ -1,9 +1,9 @@
 // lib/widgets/heatmap_3d.dart
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:flutter/material.dart' hide Material; // Hiding Flutter's Material to prevent conflict
-import 'package:flutter_cube/flutter_cube.dart' hide Vector3; // Hiding Flutter_cube's Vector3 to use the one from vector_math
-import 'package:vector_math/vector_math.dart' as vector_math;
+import 'package:flutter/material.dart' hide Material;
+import 'package:flutter_cube/flutter_cube.dart' hide Vector3;
+import 'package:vector_math/vector_math_64.dart' as vector_math;
 import '../services/heatmap_service.dart';
 import 'heatmap_legend.dart';
 
@@ -57,14 +57,19 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
   @override
   void didUpdateWidget(covariant Heatmap3DViewer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Re-create the 3D object if the grid or metric changes
     if (oldWidget.grid != widget.grid || oldWidget.metricLabel != widget.metricLabel) {
       _create3dObject();
     }
   }
 
   void _create3dObject() {
-    if (widget.grid.isEmpty) return;
+    if (widget.grid.isEmpty) {
+      heatmapObj = null;
+      if (_scene != null) {
+        _scene!.world.removeAll();
+      }
+      return;
+    }
     
     final rows = widget.grid.length;
     final cols = widget.grid[0].length;
@@ -83,32 +88,32 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
         final value = widget.grid[r][c];
         if (value.isNaN) continue;
 
-        // Normalize value to a height, clamped to a reasonable range
         final normalizedValue =
             ((value - widget.minValue) / (widget.maxValue - widget.minValue)).clamp(0.0, 1.0);
         final height = normalizedValue * maxHeight + minHeight;
 
         final cube = Object(
           name: 'cell_$r\_$c',
-          fileName: 'assets/models/cube.obj', // Ensure you have a simple cube model in assets/models/
+          fileName: 'assets/models/cube.obj',
           position: vector_math.Vector3(
               (c - cols / 2 + 0.5) * cellScaleX, height / 2, (r - rows / 2 + 0.5) * cellScaleZ),
           scale: vector_math.Vector3(cellScaleX, height, cellScaleZ),
-          material: Material(
-            diffuse: valueToColor(value, widget.minValue, widget.maxValue, widget.metricLabel),
-          ),
+          materials: [
+            Material(
+              color: valueToColor(value, widget.minValue, widget.maxValue, widget.metricLabel),
+            ),
+          ],
         );
         rootObj.add(cube);
       }
     }
-    setState(() {
-      if (_scene != null) {
-        // Clear previous objects and add the new one
-        _scene!.world.removeAll();
-        _scene!.world.add(rootObj);
-      }
-      heatmapObj = rootObj;
-    });
+    
+    // Check if the scene is initialized before trying to modify it
+    if (_scene != null) {
+      _scene!.world.removeAll();
+      _scene!.world.add(rootObj);
+    }
+    heatmapObj = rootObj;
   }
 
   void _applyController() {
@@ -128,7 +133,7 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (heatmapObj == null) {
+    if (heatmapObj == null && widget.grid.isNotEmpty) {
       _create3dObject();
     }
 
@@ -165,7 +170,7 @@ class _Heatmap3DViewerState extends State<Heatmap3DViewer> {
                 onSceneCreated: (scene) {
                   _scene = scene;
                   scene.camera.zoom = widget.controller.zoom;
-                  scene.world.add(Object(fileName: 'assets/models/plane.obj')); // Optional ground plane
+                  scene.world.add(Object(fileName: 'assets/models/plane.obj'));
                   if (heatmapObj != null) scene.world.add(heatmapObj!);
                 },
               ),
