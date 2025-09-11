@@ -186,10 +186,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
   
   // Helper: check missing columns with debug
+  // Helper: check missing columns with debug
   List<String> _checkMissingColumns(Map<String, List<dynamic>> parsed) {
     final normalized = _normalizeKeys(parsed);
-  
-      // ✅ Adjusted to what parser really outputs
+
+    // ✅ Adjusted to what parser really outputs
     final requiredCols = [
       "timestamps",
       "ph",
@@ -202,20 +203,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
       "latitudes",
       "longitudes",
     ];
-  
+
     final missing = <String>[];
     for (var col in requiredCols) {
-      if (!normalized.containsKey(col) || normalized[col] == null) {
+      if (!normalized.containsKey(col) || normalized[col] == null || normalized[col]!.isEmpty) {
         missing.add(col);
       }
     }
 
+    // Also grab the available keys for debugging
+    final available = normalized.keys.toList();
+
     if (missing.isNotEmpty) {
-      _showSnackBar("⚠️ Missing CSV columns:\n${missing.join(", ")}");
+      _showSnackBar(
+        "⚠️ Missing CSV columns: ${missing.join(", ")}\n"
+        "📄 Found columns: ${available.join(", ")}",
+      );
     } else {
-      _showSnackBar("✅ All required CSV columns found!");
+      _showSnackBar(
+        "✅ All required CSV columns found!\n"
+        "📄 Found columns: ${available.join(", ")}",
+      );
     }
-  
+
     return missing;
   }
 
