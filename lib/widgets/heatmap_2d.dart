@@ -13,7 +13,7 @@ class Heatmap2D extends StatelessWidget {
   const Heatmap2D({
     super.key,
     required this.grid,
-    this.showGridLines = false,
+    this.showGridLines = true, // Set to true to make the grid visible
     required this.metricLabel,
     required this.minValue,
     required this.maxValue,
@@ -29,35 +29,38 @@ class Heatmap2D extends StatelessWidget {
               style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)));
     }
 
-    return Row(
-      children: [
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return SizedBox(
-                width: constraints.maxWidth,
-                height: constraints.maxHeight,
-                child: CustomPaint(
-                  painter: _HeatmapPainter(
-                      grid, showGridLines, isDark, metricLabel, minValue, maxValue),
-                ),
-              );
-            },
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SizedBox(
+                  width: constraints.maxWidth,
+                  height: constraints.maxHeight,
+                  child: CustomPaint(
+                    painter: _HeatmapPainter(
+                        grid, showGridLines, isDark, metricLabel, minValue, maxValue),
+                  ),
+                );
+              },
+            ),
           ),
-        ),
-        const SizedBox(width: 10),
-        SizedBox(
-          height: MediaQuery.of(context).size.height * 0.8, // Adjust height to be proportional
-          width: 60,
-          child: HeatmapLegend(
-            minValue: minValue,
-            maxValue: maxValue,
-            metricLabel: metricLabel,
-            isDark: isDark,
-            axis: Axis.vertical,
-          ),
-        )
-      ],
+          const SizedBox(width: 16),
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.8,
+            width: 60,
+            child: HeatmapLegend(
+              minValue: minValue,
+              maxValue: maxValue,
+              metricLabel: metricLabel,
+              isDark: isDark,
+              axis: Axis.vertical,
+            ),
+          )
+        ],
+      ),
     );
   }
 }
