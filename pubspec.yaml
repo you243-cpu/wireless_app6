@@ -10,10 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   provider: ^6.0.5
-  flutter_cube:
-    git:
-      url: https://github.com/zesage/flutter_cube.git
-      ref: master
+  model_viewer_plus: ^1.7.0
+  path_provider: ^2.1.3
   http: ^1.2.2
   fl_chart: ^0.68.0
   percent_indicator: ^4.2.3
@@ -32,4 +30,3 @@ flutter:
   uses-material-design: true
   assets:
     - assets/simulated_soil_square.csv
-    - assets/models/
