@@ -19,7 +19,6 @@ class HeatmapScreen extends StatefulWidget {
 
 class _HeatmapScreenState extends State<HeatmapScreen> {
   final HeatmapService _svc = HeatmapService();
-  final Heatmap3DController _cameraController = Heatmap3DController();
 
   String _metric = 'pH';
   double _sliderValue = 1.0;
@@ -73,87 +72,24 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     }
     
     // Generate GLTF for the initial state
-    await _generateGltfFile(_gridSnapshots[_timePoints.first]!, _metric);
+    if (_timePoints.isNotEmpty) {
+      await _generateGltfFile(_gridSnapshots[_timePoints.first]!, _metric);
+    }
     _updateGridAndValues();
   }
 
   Future<void> _generateGltfFile(List<List<double>> grid, String metricLabel) async {
-    final vertices = <double>[];
-    final colors = <double>[];
-    final indices = <int>[];
-    final rows = grid.length;
-    final cols = grid[0].length;
-    final cellScale = 0.5;
-
-    final minV = _minValue, maxV = _maxValue;
-
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        final value = grid[r][c];
-        if (value.isNaN) continue;
-
-        final height = ((value - minV) / (maxV - minV)).clamp(0.0, 1.0);
-        final color = valueToColor(value, minV, maxV, metricLabel);
-
-        final x = (c - cols / 2 + 0.5) * cellScale;
-        final z = (r - rows / 2 + 0.5) * cellScale;
-        final y = height * 2.0;
-
-        // Vertices for a simple cube, scaled by height
-        // Front face
-        vertices.addAll([x, 0, z, x + cellScale, 0, z, x + cellScale, y, z, x, y, z]);
-        // Back face
-        vertices.addAll([x, 0, z + cellScale, x + cellScale, 0, z + cellScale, x + cellScale, y, z + cellScale, x, y, z + cellScale]);
-        // Other faces...
-        // ... (This is a simplified example, a full cube would have 24 vertices)
-        
-        // Colors for each vertex
-        for (int i = 0; i < 24; i++) {
-          colors.addAll([color.red / 255, color.green / 255, color.blue / 255]);
-        }
-        
-        // Indices for the cube, a simple example
-        final offset = (r * cols + c) * 24;
-        indices.addAll([
-          0 + offset, 1 + offset, 2 + offset, 0 + offset, 2 + offset, 3 + offset,
-          // ... (Indices for all other faces)
-        ]);
-      }
-    }
-
-    // A simplified GLTF structure (minimal)
-    final gltfJson = {
-      "asset": {"version": "2.0"},
-      "scenes": [{"nodes": [0]}],
-      "nodes": [{"mesh": 0}],
-      "meshes": [{
-        "primitives": [{
-          "attributes": {
-            "POSITION": 1,
-            "COLOR_0": 2,
-          },
-          "indices": 0,
-        }]
-      }],
-      "buffers": [{
-        "uri": "data:application/octet-stream;base64,...", // Base64 encoded binary data
-        "byteLength": 0
-      }],
-      "bufferViews": [],
-      "accessors": []
-    };
+    // This is a placeholder. A full implementation would involve:
+    // 1. Creating a GLTF object programmatically from your grid data.
+    // 2. Exporting the GLTF object to a file.
+    // 3. Getting the path to the saved file.
     
-    // In a real implementation, you would need to:
-    // 1. Create a binary buffer from vertices, colors, and indices.
-    // 2. Base64 encode the buffer.
-    // 3. Set the gltfJson's buffer URI and byteLength.
-    // 4. Create proper buffer views and accessors.
-    
+    // As a temporary solution to resolve the build errors,
+    // we will create a placeholder file and update the state with its path.
     final tempDir = await getTemporaryDirectory();
     final file = File('${tempDir.path}/heatmap.gltf');
-    // For this example, we'll write a simple placeholder JSON
-    await file.writeAsString(jsonEncode(gltfJson));
-    
+    await file.writeAsString(jsonEncode({'asset': {'version': '2.0'}}));
+
     setState(() {
       _gltfPath = file.path;
     });
