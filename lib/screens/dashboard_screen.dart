@@ -98,7 +98,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Load default CSV asset safely
   Future<void> _loadAssetCSV() async {
     try {
-      final csvString = await rootBundle.loadString('assets/data_aug24.csv');
+      final csvString = await rootBundle.loadString('assets/simulated_soil_square.csv');
 
       final parsed = await CSVService.parseCSV(csvString);
 
