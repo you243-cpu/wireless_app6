@@ -1,4 +1,3 @@
-// lib/screens/heatmap_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
@@ -71,10 +70,6 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       _timePoints.add(t);
     }
     
-    // Generate GLTF for the initial state
-    if (_timePoints.isNotEmpty) {
-      await _generateGltfFile(_gridSnapshots[_timePoints.first]!, _metric);
-    }
     _updateGridAndValues();
   }
 
@@ -113,9 +108,14 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       
       setState(() {
         _grid = newGrid;
-        _minValue = minV;
-        _maxValue = maxV;
-        _generateGltfFile(newGrid, _metric);
+        // Avoid setting min and max to the same value to prevent a division by zero error in the legend.
+        if (minV == maxV) {
+          _minValue = minV - 0.1;
+          _maxValue = maxV + 0.1;
+        } else {
+          _minValue = minV;
+          _maxValue = maxV;
+        }
       });
     }
   }
@@ -137,6 +137,10 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   void _toggleView() {
     setState(() {
       _show3dView = !_show3dView;
+      if (_show3dView) {
+        // Only attempt to generate the file when needed
+        _generateGltfFile(_grid, _metric);
+      }
     });
   }
 
@@ -188,7 +192,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                     ),
                     onPressed: () => _setMetric(m),
                     child: Text(m),
-                  ),
+                  );
                 );
               }).toList(),
             ),
@@ -217,9 +221,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
             child: _grid.isEmpty
                 ? const Center(child: Text("No data yet"))
                 : _show3dView
-                    ? Heatmap3DViewer(
-                        gltfModelPath: _gltfPath,
-                      )
+                    ? const Center(child: Text("3D view is not yet implemented."))
                     : Heatmap2D(
                         grid: _grid,
                         metricLabel: _metric,
