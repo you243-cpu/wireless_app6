@@ -1,233 +1,163 @@
-// lib/services/heatmap_service.dart
-import 'dart:math';
-import 'dart:ui';
-import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'dart:convert';
+import 'package:csv/csv.dart';
+import 'dart:math';
 
-/// A single sensor measurement
-class HeatPoint {
+// A single data point
+class HeatmapPoint {
+  final int x;
+  final int y;
   final DateTime t;
-  final double lat;
-  final double lon;
-  final double pH;
-  final double temp;
-  final double humidity;
-  final double ec;
-  final double n;
-  final double p;
-  final double k;
+  final Map<String, double> metrics;
 
-  HeatPoint({
+  HeatmapPoint({
+    required this.x,
+    required this.y,
     required this.t,
-    required this.lat,
-    required this.lon,
-    required this.pH,
-    required this.temp,
-    required this.humidity,
-    required this.ec,
-    required this.n,
-    required this.p,
-    required this.k,
+    required this.metrics,
   });
 }
 
-/// Service to parse CSV and prepare grid data
+// Service for creating the heatmap grid
 class HeatmapService {
-  List<HeatPoint> points = [];
+  late List<HeatmapPoint> points;
 
-  // bounds
-  late double minLat, maxLat, minLon, maxLon;
-
-  /// Load CSV from asset
-  static Future<List<HeatPoint>> parseCsvAsset(String assetPath) async {
-    final csvString = await rootBundle.loadString(assetPath);
-    return parseCsvString(csvString);
+  HeatmapService() {
+    points = [];
   }
 
-  /// Parse CSV string into HeatPoint list
-  static List<HeatPoint> parseCsvString(String csvString) {
-    final rows = const CsvToListConverter().convert(csvString, eol: '\n');
-    if (rows.isEmpty) return [];
-    final header = rows.first.map((e) => e.toString().trim()).toList();
+  void setPoints(List<HeatmapPoint> newPoints) {
+    points = newPoints;
+  }
 
-    // expected header contains timestamp, lat, lon, pH, Temperature, Humidity, EC, N, P, K
-    int idx(String name) =>
-        header.indexWhere((h) => h.toLowerCase() == name.toLowerCase());
+  static Future<List<HeatmapPoint>> parseCsvAsset(String path) async {
+    final rawData = await rootBundle.loadString(path);
+    final parser = const CsvToListConverter();
+    final List<List<dynamic>> csvTable = parser.convert(rawData);
+    
+    final header = csvTable[0].map((e) => e.toString()).toList();
+    final List<HeatmapPoint> points = [];
 
-    final int ti = idx('timestamp');
-    final int lati = idx('lat');
-    final int loni = idx('lon');
-    final int phi = idx('ph');
-    final int tempi = idx('temperature');
-    final int humi = idx('humidity');
-    final int eci = idx('ec');
-    final int ni = idx('n');
-    final int pi = idx('p');
-    final int ki = idx('k');
+    // Map column names to indices
+    final xIndex = header.indexOf('x');
+    final yIndex = header.indexOf('y');
+    final tIndex = header.indexOf('t');
 
-    final List<HeatPoint> pts = [];
-    for (var i = 1; i < rows.length; i++) {
-      final row = rows[i];
-      try {
-        final ts = DateTime.parse(row[ti].toString());
-        final lat = double.parse(row[lati].toString());
-        final lon = double.parse(row[loni].toString());
-        final pH = double.parse(row[phi].toString());
-        final temp = double.parse(row[tempi].toString());
-        final humidity = double.parse(row[humi].toString());
-        final ec = double.parse(row[eci].toString());
-        final n = double.parse(row[ni].toString());
-        final p = double.parse(row[pi].toString());
-        final k = double.parse(row[ki].toString());
+    if (xIndex == -1 || yIndex == -1 || tIndex == -1) {
+      throw Exception("CSV file must contain 'x', 'y', and 't' columns.");
+    }
 
-        pts.add(HeatPoint(
-          t: ts,
-          lat: lat,
-          lon: lon,
-          pH: pH,
-          temp: temp,
-          humidity: humidity,
-          ec: ec,
-          n: n,
-          p: p,
-          k: k,
-        ));
-      } catch (_) {
-        // ignore malformed rows
+    final metricNames = header.sublist(tIndex + 1);
+
+    for (var i = 1; i < csvTable.length; i++) {
+      final row = csvTable[i];
+      final metrics = <String, double>{};
+      
+      for (var j = 0; j < metricNames.length; j++) {
+        metrics[metricNames[j]] = row[tIndex + 1 + j].toDouble();
       }
+
+      points.add(HeatmapPoint(
+        x: row[xIndex],
+        y: row[yIndex],
+        t: DateTime.parse(row[tIndex]),
+        metrics: metrics,
+      ));
     }
-    return pts;
+    return points;
   }
 
-  /// Set points and compute bounds
-  void setPoints(List<HeatPoint> pts) {
-    points = pts;
-    if (pts.isEmpty) {
-      minLat = maxLat = minLon = maxLon = 0;
-      return;
-    }
-    minLat = pts.map((p) => p.lat).reduce(min);
-    maxLat = pts.map((p) => p.lat).reduce(max);
-    minLon = pts.map((p) => p.lon).reduce(min);
-    maxLon = pts.map((p) => p.lon).reduce(max);
-
-    // tiny padding
-    final padLat = (maxLat - minLat) * 0.02;
-    final padLon = (maxLon - minLon) * 0.02;
-    minLat -= padLat;
-    maxLat += padLat;
-    minLon -= padLon;
-    maxLon += padLon;
-  }
-
-  /// Create grid aggregated values for a metric (pH/temp/humidity/ec/n/p/k/all)
+  // Create a grid from the data points
   List<List<double>> createGrid({
     required String metric,
     required DateTime start,
     required DateTime end,
-    int cols = 40,
-    int rows = 40,
   }) {
-    final sums = List.generate(rows, (_) => List<double>.filled(cols, 0.0));
-    final counts = List.generate(rows, (_) => List<int>.filled(cols, 0));
-
-    for (final pt in points) {
-      if (pt.t.isBefore(start) || pt.t.isAfter(end)) continue;
-
-      // map lat/lon to grid col,row
-      final cx = ((pt.lon - minLon) / (maxLon - minLon) * (cols - 1))
-          .clamp(0.0, cols - 1.0);
-      final cy = ((pt.lat - minLat) / (maxLat - minLat) * (rows - 1))
-          .clamp(0.0, rows - 1.0);
-      final col = cx.round();
-      final row = (rows - 1 - cy.round());
-
-      double val;
-      switch (metric.toLowerCase()) {
-        case 'ph':
-          val = pt.pH;
-          break;
-        case 'temperature':
-          val = pt.temp;
-          break;
-        case 'humidity':
-          val = pt.humidity;
-          break;
-        case 'ec':
-          val = pt.ec;
-          break;
-        case 'n':
-          val = pt.n;
-          break;
-        case 'p':
-          val = pt.p;
-          break;
-        case 'k':
-          val = pt.k;
-          break;
-        case 'all':
-          // simple average of everything
-          val = (pt.pH +
-                  pt.temp +
-                  pt.humidity +
-                  pt.ec +
-                  pt.n +
-                  pt.p +
-                  pt.k) /
-              7.0;
-          break;
-        default:
-          val = double.nan;
-      }
-
-      sums[row][col] += val;
-      counts[row][col] += 1;
+    if (points.isEmpty) {
+      return [
+        [double.nan]
+      ];
     }
 
-    // compute averages; empty cells -> double.nan
-    final grid =
-        List.generate(rows, (r) => List<double>.filled(cols, double.nan));
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        if (counts[r][c] > 0) {
-          grid[r][c] = sums[r][c] / counts[r][c];
-        }
-      }
+    final filteredPoints = points.where((p) =>
+        (p.t.isAfter(start) || p.t.isAtSameMomentAs(start)) &&
+        (p.t.isBefore(end) || p.t.isAtSameMomentAs(end)) &&
+        p.metrics.containsKey(metric)).toList();
+
+    if (filteredPoints.isEmpty) {
+      return [
+        [double.nan]
+      ];
     }
+
+    final maxX = filteredPoints.map((p) => p.x).reduce(max);
+    final maxY = filteredPoints.map((p) => p.y).reduce(max);
+
+    final grid = List.generate(maxY + 1, (i) => List.filled(maxX + 1, double.nan));
+
+    final Map<String, List<double>> combinedValues = {};
+    for (var p in filteredPoints) {
+      final key = '${p.x}_${p.y}';
+      if (!combinedValues.containsKey(key)) {
+        combinedValues[key] = [];
+      }
+      combinedValues[key]!.add(p.metrics[metric]!);
+    }
+
+    for (var entry in combinedValues.entries) {
+      final parts = entry.key.split('_');
+      final x = int.parse(parts[0]);
+      final y = int.parse(parts[1]);
+      final avgValue = entry.value.reduce((a, b) => a + b) / entry.value.length;
+      grid[y][x] = avgValue;
+    }
+
     return grid;
   }
 }
 
-/// Optimal value ranges for different metrics, used for the green center of the legend.
-const Map<String, List<double>> optimalRanges = {
-  'pH': [6.0, 7.0],
-  'Temperature': [18.0, 24.0], // in Celsius
-  'EC': [1.0, 2.5], // Siemens/meter
-  'N': [1.0, 2.0], // mg/L
-  'P': [0.15, 0.3], // mg/L
-  'K': [0.5, 1.0], // mg/L
-  'All': [0.5, 1.0], // arbitrary for 'all'
+// This map defines the "optimal" range for each metric for color scaling.
+final Map<String, List<double>> optimalRanges = {
+  'pH': [6.0, 7.5],
+  'Temperature': [20.0, 25.0],
+  'Humidity': [40.0, 60.0],
+  'EC': [1.0, 2.0],
+  'N': [100.0, 150.0],
+  'P': [20.0, 50.0],
+  'K': [150.0, 250.0],
+  'All': [0, 1]
 };
 
-/// Convert numeric value to color (blue -> green -> red gradient)
-Color valueToColor(double value, double min, double max, String metric) {
-  if (value.isNaN) return Colors.transparent;
+// Converts a value to a color based on the optimal range for the metric
+Color valueToColor(double value, double minValue, double maxValue, String metric) {
+  if (value.isNaN) {
+    return Colors.black.withOpacity(0.1);
+  }
 
-  final optimalRange = optimalRanges[metric] ?? [min, max];
+  final optimalRange = optimalRanges[metric] ?? [minValue, maxValue];
   final optimalMin = optimalRange[0];
   final optimalMax = optimalRange[1];
 
-  if (value >= optimalMin && value <= optimalMax) {
-    // Value is in the optimal range (green)
+  // Map value to a 0-1 range based on the overall min/max of the data
+  final clampedValue = value.clamp(minValue, maxValue);
+  final normalizedValue = (clampedValue - minValue) / (maxValue - minValue);
+
+  // Define stops for the gradient
+  final optimalMinStop = (optimalMin - minValue) / (maxValue - minValue);
+  final optimalMaxStop = (optimalMax - minValue) / (maxValue - minValue);
+
+  if (normalizedValue < optimalMinStop) {
+    // Transition from blue (min) to green (optimal min)
+    final progress = normalizedValue / optimalMinStop;
+    return Color.lerp(Colors.blue, Colors.green, progress)!;
+  } else if (normalizedValue >= optimalMinStop && normalizedValue <= optimalMaxStop) {
+    // Stay in the green range for optimal values
     return Colors.green;
-  } else if (value < optimalMin) {
-    // Value is too low (blue -> green)
-    final t = ((value - min) / (optimalMin - min)).clamp(0.0, 1.0);
-    return Color.lerp(Colors.blue, Colors.green, t)!;
   } else {
-    // Value is too high (green -> red)
-    final t = ((value - optimalMax) / (max - optimalMax)).clamp(0.0, 1.0);
-    return Color.lerp(Colors.green, Colors.red, t)!;
+    // Transition from green (optimal max) to red (max)
+    final progress = (normalizedValue - optimalMaxStop) / (1.0 - optimalMaxStop);
+    return Color.lerp(Colors.green, Colors.red, progress)!;
   }
 }
+```eof
