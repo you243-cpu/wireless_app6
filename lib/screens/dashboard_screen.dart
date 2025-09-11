@@ -150,21 +150,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // Safe provider update
+  // Helper: normalize keys to lowercase
+  Map<String, List<dynamic>> _normalizeKeys(Map<String, List<dynamic>> parsed) {
+    final normalized = <String, List<dynamic>>{};
+    for (var entry in parsed.entries) {
+      normalized[entry.key.toLowerCase()] = entry.value;
+    }
+    return normalized;
+  }
+
+  // Safe provider update
   void _updateProvider(Map<String, List<dynamic>> parsed) {
     try {
       final provider = context.read<CSVDataProvider>();
-  
+
+      final normalized = _normalizeKeys(parsed);
+
       provider.updateData(
-        pH: parsed["pH"]!.cast<double>(),
-        temperature: parsed["temperature"]!.cast<double>(),
-        humidity: parsed["humidity"]!.cast<double>(),
-        ec: parsed["EC"]!.cast<double>(),
-        n: parsed["N"]!.cast<double>(),
-        p: parsed["P"]!.cast<double>(),
-        k: parsed["K"]!.cast<double>(),
-        timestamps: parsed["timestamps"]!.cast<DateTime>(),
-        latitudes: parsed["latitudes"]!.cast<double>(),
-        longitudes: parsed["longitudes"]!.cast<double>(),
+        pH: normalized["ph"]!.cast<double>(),
+        temperature: normalized["temperature"]!.cast<double>(),
+        humidity: normalized["humidity"]!.cast<double>(),
+        ec: normalized["ec"]!.cast<double>(),   // works for ec or EC
+        n: normalized["n"]!.cast<double>(),
+        p: normalized["p"]!.cast<double>(),
+        k: normalized["k"]!.cast<double>(),
+        timestamps: normalized["timestamp"]!.cast<DateTime>(),
+        latitudes: normalized["lat"]!.cast<double>(),
+        longitudes: normalized["lon"]!.cast<double>(),
       );
     } catch (e) {
       _showSnackBar("Error updating provider: $e");
@@ -174,27 +186,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   
   // Helper: check missing columns
   List<String> _checkMissingColumns(Map<String, List<dynamic>> parsed) {
+    final normalized = _normalizeKeys(parsed);
     final requiredCols = [
-      "timestamps",
-      "pH",
+      "timestamp",
+      "ph",
       "temperature",
       "humidity",
-      "EC",
-      "N",
-      "P",
-      "K",
-      "latitudes",
-      "longitudes",
+      "ec",
+      "n",
+      "p",
+      "k",
+      "lat",
+      "lon",
     ];
   
     final missing = <String>[];
     for (var col in requiredCols) {
-      if (!parsed.containsKey(col) || parsed[col] == null) {
+      if (!normalized.containsKey(col) || normalized[col] == null) {
         missing.add(col);
       }
-    }
+    }  
     return missing;
   }
+
   
   // Helper: show snackbar
   void _showSnackBar(String message) {
