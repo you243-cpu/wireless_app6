@@ -37,22 +37,21 @@ class CSVService {
     List<double> p = [];
     List<double> k = [];
 
+    // skip header row
     for (var i = 1; i < rows.length; i++) {
       try {
-        // Expected CSV format:
-        // timestamp, lat, lon, pH, temperature, humidity, ec, n, p, k
         timestamps.add(DateTime.parse(rows[i][0].toString()));
-        latitudes.add(rows[i][1].toDouble());
-        longitudes.add(rows[i][2].toDouble());
-        pH.add(rows[i][3].toDouble());
-        temperature.add(rows[i][4].toDouble());
-        humidity.add(rows[i][5].toDouble());
-        ec.add(rows[i][6].toDouble());
-        n.add(rows[i][7].toDouble());
-        p.add(rows[i][8].toDouble());
-        k.add(rows[i][9].toDouble());
+        latitudes.add(double.parse(rows[i][1].toString()));
+        longitudes.add(double.parse(rows[i][2].toString()));
+        pH.add(double.parse(rows[i][3].toString()));
+        temperature.add(double.parse(rows[i][4].toString()));
+        humidity.add(double.parse(rows[i][5].toString()));
+        ec.add(double.parse(rows[i][6].toString()));
+        n.add(double.parse(rows[i][7].toString()));
+        p.add(double.parse(rows[i][8].toString()));
+        k.add(double.parse(rows[i][9].toString()));
       } catch (e) {
-        // Skip bad rows silently
+        print("Skipping bad row $i: $e");
         continue;
       }
     }
@@ -64,7 +63,7 @@ class CSVService {
       "pH": pH,
       "temperature": temperature,
       "humidity": humidity,
-      "ec": ec,
+      "EC": ec, // 🔑 normalize key to "EC"
       "N": n,
       "P": p,
       "K": k,
