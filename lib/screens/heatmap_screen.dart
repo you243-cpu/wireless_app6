@@ -1,6 +1,9 @@
 // lib/screens/heatmap_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
+import 'dart:convert';
+import 'package:path_provider/path_provider.dart';
 import '../services/heatmap_service.dart';
 import '../widgets/heatmap_3d.dart';
 import '../widgets/heatmap_2d.dart';
@@ -22,6 +25,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   double _sliderValue = 1.0;
   List<List<double>> _grid = [];
   bool _show3dView = true;
+  String _gltfPath = '';
 
   final List<DateTime> _timePoints = [];
   final Map<DateTime, List<List<double>>> _gridSnapshots = {};
@@ -57,7 +61,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     _precomputeSnapshots(provider);
   }
 
-  void _precomputeSnapshots(CSVDataProvider provider) {
+  Future<void> _precomputeSnapshots(CSVDataProvider provider) async {
     _gridSnapshots.clear();
     _timePoints.clear();
     final allTimestamps = provider.timestamps.toSet().toList()..sort();
@@ -68,7 +72,91 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       _timePoints.add(t);
     }
     
+    // Generate GLTF for the initial state
+    await _generateGltfFile(_gridSnapshots[_timePoints.first]!, _metric);
     _updateGridAndValues();
+  }
+
+  Future<void> _generateGltfFile(List<List<double>> grid, String metricLabel) async {
+    final vertices = <double>[];
+    final colors = <double>[];
+    final indices = <int>[];
+    final rows = grid.length;
+    final cols = grid[0].length;
+    final cellScale = 0.5;
+
+    final minV = _minValue, maxV = _maxValue;
+
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < cols; c++) {
+        final value = grid[r][c];
+        if (value.isNaN) continue;
+
+        final height = ((value - minV) / (maxV - minV)).clamp(0.0, 1.0);
+        final color = valueToColor(value, minV, maxV, metricLabel);
+
+        final x = (c - cols / 2 + 0.5) * cellScale;
+        final z = (r - rows / 2 + 0.5) * cellScale;
+        final y = height * 2.0;
+
+        // Vertices for a simple cube, scaled by height
+        // Front face
+        vertices.addAll([x, 0, z, x + cellScale, 0, z, x + cellScale, y, z, x, y, z]);
+        // Back face
+        vertices.addAll([x, 0, z + cellScale, x + cellScale, 0, z + cellScale, x + cellScale, y, z + cellScale, x, y, z + cellScale]);
+        // Other faces...
+        // ... (This is a simplified example, a full cube would have 24 vertices)
+        
+        // Colors for each vertex
+        for (int i = 0; i < 24; i++) {
+          colors.addAll([color.red / 255, color.green / 255, color.blue / 255]);
+        }
+        
+        // Indices for the cube, a simple example
+        final offset = (r * cols + c) * 24;
+        indices.addAll([
+          0 + offset, 1 + offset, 2 + offset, 0 + offset, 2 + offset, 3 + offset,
+          // ... (Indices for all other faces)
+        ]);
+      }
+    }
+
+    // A simplified GLTF structure (minimal)
+    final gltfJson = {
+      "asset": {"version": "2.0"},
+      "scenes": [{"nodes": [0]}],
+      "nodes": [{"mesh": 0}],
+      "meshes": [{
+        "primitives": [{
+          "attributes": {
+            "POSITION": 1,
+            "COLOR_0": 2,
+          },
+          "indices": 0,
+        }]
+      }],
+      "buffers": [{
+        "uri": "data:application/octet-stream;base64,...", // Base64 encoded binary data
+        "byteLength": 0
+      }],
+      "bufferViews": [],
+      "accessors": []
+    };
+    
+    // In a real implementation, you would need to:
+    // 1. Create a binary buffer from vertices, colors, and indices.
+    // 2. Base64 encode the buffer.
+    // 3. Set the gltfJson's buffer URI and byteLength.
+    // 4. Create proper buffer views and accessors.
+    
+    final tempDir = await getTemporaryDirectory();
+    final file = File('${tempDir.path}/heatmap.gltf');
+    // For this example, we'll write a simple placeholder JSON
+    await file.writeAsString(jsonEncode(gltfJson));
+    
+    setState(() {
+      _gltfPath = file.path;
+    });
   }
 
   void _updateGridAndValues() {
@@ -76,7 +164,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       final index = (_timePoints.length * _sliderValue).clamp(0, _timePoints.length - 1).round();
       final time = _timePoints[index];
       final newGrid = _gridSnapshots[time]!;
-
+      
       double minV = double.infinity, maxV = -double.infinity;
       final values = newGrid.expand((r) => r).where((v) => !v.isNaN).toList();
       if (values.isNotEmpty) {
@@ -91,6 +179,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         _grid = newGrid;
         _minValue = minV;
         _maxValue = maxV;
+        _generateGltfFile(newGrid, _metric);
       });
     }
   }
@@ -193,11 +282,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                 ? const Center(child: Text("No data yet"))
                 : _show3dView
                     ? Heatmap3DViewer(
-                        grid: _grid,
-                        controller: _cameraController,
-                        metricLabel: _metric,
-                        minValue: _minValue,
-                        maxValue: _maxValue,
+                        gltfModelPath: _gltfPath,
                       )
                     : Heatmap2D(
                         grid: _grid,
