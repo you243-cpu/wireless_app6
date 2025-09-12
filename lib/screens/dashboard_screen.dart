@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:provider/provider.dart';
 
@@ -15,6 +14,7 @@ import '../widgets/gauges.dart';
 import '../widgets/nutrient_card.dart';
 import 'graph_screen.dart';
 import 'heatmap_screen.dart';
+import 'robot_control_screen.dart'; // Import the new screen
 import '../providers/csv_data_provider.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -95,7 +95,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // Load default CSV asset
-  // Load default CSV asset
   Future<void> _loadAssetCSV() async {
     try {
       final csvString = await rootBundle.loadString('assets/simulated_soil_square.csv');
@@ -112,18 +111,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _showSnackBar("Default CSV missing columns: ${missing.join(", ")}");
         return;
       }
-  
+
       _updateProvider(parsed);
-  
+
       _showSnackBar(
         "Loaded default CSV with ${parsed["timestamps"]!.length} rows successfully",
       );
     } catch (e) {
       _showSnackBar("Error loading default CSV: $e");
-      print("Default CSV loading error: $e");
+      debugPrint("Default CSV loading error: $e");
     }
   }
-  
+
   // Pick CSV file
   Future<void> pickCsvFile() async {
     try {
@@ -145,11 +144,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _showSnackBar("Loaded ${parsed["timestamps"]!.length} rows successfully");
     } catch (e) {
       _showSnackBar("Error loading CSV: $e");
-      print("CSV loading error: $e");
+      debugPrint("CSV loading error: $e");
     }
   }
 
-  // Safe provider update
   // Helper: normalize keys to lowercase
   Map<String, List<dynamic>> _normalizeKeys(Map<String, List<dynamic>> parsed) {
     final normalized = <String, List<dynamic>>{};
@@ -158,14 +156,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     return normalized;
   }
-  
+
   // Safe provider update
   void _updateProvider(Map<String, List<dynamic>> parsed) {
     try {
       final provider = context.read<CSVDataProvider>();
       final normalized = _normalizeKeys(parsed);
-  
-      // ✅ Adjusted to match parser keys
+
       provider.updateData(
         pH: normalized["ph"]!.cast<double>(),
         temperature: normalized["temperature"]!.cast<double>(),
@@ -178,19 +175,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         latitudes: normalized["latitudes"]!.cast<double>(),
         longitudes: normalized["longitudes"]!.cast<double>(),
       );
-  
+
       _showSnackBar("✅ CSV data loaded successfully!");
     } catch (e) {
       _showSnackBar("❌ Error updating provider:\n$e");
     }
   }
-  
-  // Helper: check missing columns with debug
+
   // Helper: check missing columns with debug
   List<String> _checkMissingColumns(Map<String, List<dynamic>> parsed) {
     final normalized = _normalizeKeys(parsed);
 
-    // ✅ Adjusted to what parser really outputs
     final requiredCols = [
       "timestamps",
       "ph",
@@ -229,12 +224,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return missing;
   }
 
-  
   // Helper: show snackbar
   void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    }
   }
 
 
@@ -243,8 +239,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     MyApp.themeNotifier.value = current == ThemeMode.system
         ? ThemeMode.light
         : current == ThemeMode.light
-            ? ThemeMode.dark
-            : ThemeMode.system;
+        ? ThemeMode.dark
+        : ThemeMode.system;
   }
 
   Icon _themeIcon() {
@@ -278,6 +274,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   MaterialPageRoute(builder: (_) => const HeatmapScreen()),
                 ),
               ),
+              // New button for the robot control screen
+              IconButton(
+                icon: const Icon(Icons.smart_toy),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const RobotControlScreen()),
+                ),
+              ),
             ],
           ),
           body: SingleChildScrollView(
@@ -291,7 +295,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 NutrientCard(N: N, P: P, K: K),
                 const SizedBox(height: 20),
                 Text(
-                  "🌡️ Temp: $temperature °C   💧 Humidity: $humidity%   ⚡ EC: $ec",
+                  "🌡️ Temp: $temperature °C    💧 Humidity: $humidity%    ⚡ EC: $ec",
                 ),
               ],
             ),
