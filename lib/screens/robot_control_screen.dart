@@ -1,3 +1,4 @@
+// lib/screens/robot_control_screen.dart
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -11,18 +12,31 @@ class RobotControlScreen extends StatefulWidget {
 class _RobotControlScreenState extends State<RobotControlScreen> {
   final String espIP = "192.168.4.1"; // ESP8266 IP
   
-  // Helper to send commands to the ESP8266
+  // Helper to send commands to the ESP8266 and handle the response
   Future<void> sendCommand(String command) async {
     try {
       final url = Uri.parse("http://$espIP/command?action=$command");
       final response = await http.get(url);
+      
+      String message;
       if (response.statusCode == 200) {
-        debugPrint("✅ Command sent: $command");
+        message = "✅ Command '${command}' sent. Response: ${response.body}";
       } else {
-        debugPrint("❌ Failed to send command: $command");
+        message = "❌ Failed to send command. Status: ${response.statusCode}. Response: ${response.body}";
       }
+      
+      _showSnackBar(message);
     } catch (e) {
-      debugPrint("❌ Error sending command: $e");
+      _showSnackBar("❌ Error sending command: $e");
+    }
+  }
+
+  // Helper to show a SnackBar with feedback
+  void _showSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
     }
   }
 
