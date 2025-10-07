@@ -42,8 +42,12 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   Future<void> _loadData() async {
     try {
       // Use available default asset (lat/lon/timestamp grid)
-      final points = await HeatmapService.parseCsvAsset('assets/simulated_soil_square.csv');
+      final points = await HeatmapService
+          .parseCsvAsset('assets/simulated_soil_square.csv')
+          .timeout(const Duration(seconds: 5));
       heatmapService.setPoints(points);
+
+      if (!mounted) return;
 
       if (points.isNotEmpty) {
         setState(() {
@@ -64,6 +68,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       }
     } catch (e) {
       print('Error loading data: $e');
+      if (!mounted) return;
       setState(() {
         isLoading = false;
       });
@@ -91,21 +96,24 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       final min = allValues.reduce((a, b) => a < b ? a : b);
       final max = allValues.reduce((a, b) => a > b ? a : b);
 
+      double adjustedMin = min;
+      double adjustedMax = max;
+      if (adjustedMin == adjustedMax) {
+        adjustedMin = adjustedMin - 0.01;
+        adjustedMax = adjustedMax + 0.01;
+      }
+
       setState(() {
         gridData = newGrid;
-        minValue = min;
-        maxValue = max;
+        minValue = adjustedMin;
+        maxValue = adjustedMax;
       });
-
-      if (minValue == maxValue) {
-        minValue = minValue - 0.01;
-        maxValue = maxValue + 0.01;
-      }
     } else {
+      // When no finite values are present, still provide a non-zero range for UI
       setState(() {
         gridData = newGrid;
         minValue = 0;
-        maxValue = 0;
+        maxValue = 1;
       });
     }
   }
