@@ -111,11 +111,12 @@ class HeatmapService {
     DateTime _parseDate(dynamic v) {
       final s = v.toString().trim();
       try {
+        // Accept ISO or space-separated; DateTime.parse treats no timezone as local
         return DateTime.parse(s);
       } catch (_) {
-        // Try common format
+        // Parse as LOCAL time to avoid unintended timezone shifts
         try {
-          return DateFormat('yyyy-MM-dd HH:mm:ss').parse(s, true).toLocal();
+          return DateFormat('yyyy-MM-dd HH:mm:ss').parse(s);
         } catch (e) {
           throw Exception("Unable to parse date: $s");
         }
