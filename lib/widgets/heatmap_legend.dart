@@ -25,8 +25,10 @@ class HeatmapLegend extends StatelessWidget {
     final optimalMin = optimalRange[0];
     final optimalMax = optimalRange[1];
 
-    final blueStop = (optimalMin - minValue) / (maxValue - minValue);
-    final redStop = (optimalMax - minValue) / (maxValue - minValue);
+    final double range = (maxValue - minValue).abs() < 1e-12 ? 1.0 : (maxValue - minValue);
+
+    final blueStop = (optimalMin - minValue) / range;
+    final redStop = (optimalMax - minValue) / range;
 
     final stops = [
       0.0,
