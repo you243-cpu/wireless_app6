@@ -53,6 +53,14 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
           isLoading = false;
         });
         _updateGridAndValues();
+      } else {
+        // Ensure spinner clears even when dataset is empty
+        setState(() {
+          startTime = null;
+          endTime = null;
+          gridData = [];
+          isLoading = false;
+        });
       }
     } catch (e) {
       print('Error loading data: $e');
@@ -168,8 +176,8 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         ],
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
+              ? const Center(child: CircularProgressIndicator())
+              : Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
