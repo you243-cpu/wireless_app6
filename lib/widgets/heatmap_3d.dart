@@ -79,7 +79,8 @@ class _IsoSurfacePainter extends CustomPainter {
         final v = grid[r][c];
         if (!v.isFinite) continue;
         final color = valueToColor(v, minValue, maxValue, metricLabel);
-        final double h = ((v - minValue) / (maxValue - minValue)).clamp(0.0, 1.0) * heightScale + 1.0;
+        final double safeRange = (maxValue - minValue).abs() < 1e-12 ? 1.0 : (maxValue - minValue);
+        final double h = ((v - minValue) / safeRange).clamp(0.0, 1.0) * heightScale + 1.0;
 
         // Isometric projection from grid coords to screen
         final double x = (c - r) * cell * 0.866; // cos(30°)
