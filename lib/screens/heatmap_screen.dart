@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/heatmap_service.dart';
 import '../widgets/heatmap_2d.dart';
 import '../widgets/heatmap_3d.dart';
+import '../widgets/heatmap_3d_gl.dart';
 
 class HeatmapScreen extends StatefulWidget {
   const HeatmapScreen({super.key});
@@ -42,9 +43,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   Future<void> _loadData() async {
     try {
       // Use available default asset (lat/lon/timestamp grid)
-      final points = await HeatmapService
-          .parseCsvAsset('assets/simulated_soil_square.csv')
-          .timeout(const Duration(seconds: 5));
+      final points = await HeatmapService.parseCsvAsset('assets/simulated_soil_square.csv');
       heatmapService.setPoints(points);
 
       if (!mounted) return;
@@ -233,7 +232,12 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                   Expanded(
                     child: (gridData != null && gridData!.isNotEmpty)
                         ? (is3DView
-                            ? Heatmap3D(grid: gridData!, metricLabel: currentMetric, minValue: minValue, maxValue: maxValue)
+                            ? Heatmap3DGL(
+                                grid: gridData!,
+                                metricLabel: currentMetric,
+                                minValue: minValue,
+                                maxValue: maxValue,
+                              )
                             : Heatmap2D(
                                 grid: gridData!,
                                 metricLabel: currentMetric,
