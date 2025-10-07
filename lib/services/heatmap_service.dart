@@ -266,28 +266,39 @@ Color valueToColor(double value, double minValue, double maxValue, String metric
     return Colors.black.withOpacity(0.1);
   }
 
+  final double range = maxValue - minValue;
+  // Guard against zero/invalid range to avoid divide-by-zero and NaNs
+  if (!range.isFinite || range.abs() < 1e-12) {
+    // Default neutral color when range is invalid
+    return Colors.green;
+  }
+
   final optimalRange = optimalRanges[metric] ?? [minValue, maxValue];
   final optimalMin = optimalRange[0];
   final optimalMax = optimalRange[1];
 
   // Map value to a 0-1 range based on the overall min/max of the data
   final clampedValue = value.clamp(minValue, maxValue);
-  final normalizedValue = (clampedValue - minValue) / (maxValue - minValue);
+  final normalizedValue = (clampedValue - minValue) / range;
 
   // Define stops for the gradient
-  final optimalMinStop = (optimalMin - minValue) / (maxValue - minValue);
-  final optimalMaxStop = (optimalMax - minValue) / (maxValue - minValue);
+  final optimalMinStop = (optimalMin - minValue) / range;
+  final optimalMaxStop = (optimalMax - minValue) / range;
 
   if (normalizedValue < optimalMinStop) {
     // Transition from blue (min) to green (optimal min)
-    final progress = normalizedValue / optimalMinStop;
+    final double denom = (optimalMinStop <= 0 || !optimalMinStop.isFinite) ? 1.0 : optimalMinStop;
+    final progress = (normalizedValue / denom).clamp(0.0, 1.0);
     return Color.lerp(Colors.blue, Colors.green, progress)!;
   } else if (normalizedValue >= optimalMinStop && normalizedValue <= optimalMaxStop) {
     // Stay in the green range for optimal values
     return Colors.green;
   } else {
     // Transition from green (optimal max) to red (max)
-    final progress = (normalizedValue - optimalMaxStop) / (1.0 - optimalMaxStop);
+    final double denom = ((1.0 - optimalMaxStop) <= 0 || !(1.0 - optimalMaxStop).isFinite)
+        ? 1.0
+        : (1.0 - optimalMaxStop);
+    final progress = ((normalizedValue - optimalMaxStop) / denom).clamp(0.0, 1.0);
     return Color.lerp(Colors.green, Colors.red, progress)!;
   }
 }
