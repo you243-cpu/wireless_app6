@@ -42,9 +42,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   Future<void> _loadData() async {
     try {
       // Use available default asset (lat/lon/timestamp grid)
-      final points = await HeatmapService
-          .parseCsvAsset('assets/simulated_soil_square.csv')
-          .timeout(const Duration(seconds: 5));
+      final points = await HeatmapService.parseCsvAsset('assets/simulated_soil_square.csv');
       heatmapService.setPoints(points);
 
       if (!mounted) return;
