@@ -2,18 +2,63 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert'; // For encoding/decoding JSON
+// Ensure you also have collection (or another package with firstWhereOrNull)
+// or just rely on the extension defined later.
 
+// ====================================================================
+// --- CONSTANT ICON MAP (The FIX for Tree Shaking) ---
+// ====================================================================
+
+// Define a static class with a constant map of string keys to IconData objects.
+// The compiler sees all these constant IconData objects and includes them.
+class SupportedIcons {
+  static const Map<String, IconData> iconMap = {
+    'arrow_upward': Icons.arrow_upward,
+    'arrow_downward': Icons.arrow_downward,
+    'arrow_back': Icons.arrow_back,
+    'arrow_forward': Icons.arrow_forward,
+    'pause': Icons.pause,
+    'stop': Icons.stop,
+    'warning': Icons.warning,
+    'lightbulb': Icons.lightbulb,
+    'lightbulb_outline': Icons.lightbulb_outline,
+    'assistant_photo': Icons.assistant_photo,
+    'code': Icons.code,
+    'home': Icons.home,
+    'power': Icons.power_settings_new,
+    'sensors': Icons.sensors,
+    'camera': Icons.camera_alt,
+    'build': Icons.build,
+    // Add more icons here to make them selectable by the user
+  };
+
+  // Helper to get the actual IconData using the global map
+  static IconData? getIcon(String key) {
+    // Returns the IconData object or null if the key doesn't exist.
+    return iconMap[key];
+  }
+
+  // Helper to get the string key from an IconData object
+  static String? getKey(IconData icon) {
+    return iconMap.entries
+        .firstWhereOrNull((entry) => entry.value.codePoint == icon.codePoint)
+        ?.key;
+  }
+}
+
+// ====================================================================
 // --- Model for a Custom Robot Command Button ---
+// ====================================================================
 class CommandButton {
   final String label;
   final String command;
-  final String? iconCodePoint; // Stored as a string for SharedPreferences
+  final String? iconKey; // CHANGED: Stored as a string KEY for SharedPreferences
   final String? imageUrl;
 
   CommandButton({
     required this.label,
     required this.command,
-    this.iconCodePoint,
+    this.iconKey, // Use iconKey instead of codePoint
     this.imageUrl,
   });
 
@@ -21,7 +66,7 @@ class CommandButton {
   Map<String, dynamic> toJson() => {
         'label': label,
         'command': command,
-        'iconCodePoint': iconCodePoint,
+        'iconKey': iconKey, // Save the key
         'imageUrl': imageUrl,
       };
 
@@ -29,20 +74,18 @@ class CommandButton {
   factory CommandButton.fromJson(Map<String, dynamic> json) => CommandButton(
         label: json['label'] as String,
         command: json['command'] as String,
-        iconCodePoint: json['iconCodePoint'] as String?,
+        iconKey: json['iconKey'] as String?, // Load the key
         imageUrl: json['imageUrl'] as String?,
       );
 
-  // Helper to get the actual IconData from the stored string
-  IconData? get iconData => iconCodePoint != null
-      ? IconData(
-          int.parse(iconCodePoint!),
-          fontFamily: 'MaterialIcons',
-        )
-      : null;
+  // Helper to get the actual IconData from the stored string key (NOW CONSTANT)
+  // This references the constant map, eliminating the tree-shaking error.
+  IconData? get iconData => iconKey != null ? SupportedIcons.getIcon(iconKey!) : null;
 }
 
+// ====================================================================
 // --- Main Control Screen ---
+// ====================================================================
 class RobotControlScreen extends StatefulWidget {
   const RobotControlScreen({super.key});
 
@@ -54,40 +97,40 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
   static const String _prefsKey = 'customRobotCommands';
   final String espIP = "192.168.4.1"; // ESP8266 IP
 
-  // Default D-pad commands (used for initial load and reset)
+  // Default D-pad commands (NOW USING iconKey)
   final List<CommandButton> _defaultDpadCommands = [
     CommandButton(
         label: 'Forward',
         command: 'forward',
-        iconCodePoint: Icons.arrow_upward.codePoint.toString()),
+        iconKey: 'arrow_upward'),
     CommandButton(
         label: 'Backward',
         command: 'backward',
-        iconCodePoint: Icons.arrow_downward.codePoint.toString()),
+        iconKey: 'arrow_downward'),
     CommandButton(
         label: 'Left',
         command: 'left',
-        iconCodePoint: Icons.arrow_back.codePoint.toString()),
+        iconKey: 'arrow_back'),
     CommandButton(
         label: 'Right',
         command: 'right',
-        iconCodePoint: Icons.arrow_forward.codePoint.toString()),
+        iconKey: 'arrow_forward'),
     CommandButton(
         label: 'STOP',
         command: 'stop',
-        iconCodePoint: Icons.pause.codePoint.toString()),
+        iconKey: 'pause'),
   ];
 
-  // Default Action commands (used for initial load and reset)
+  // Default Action commands (NOW USING iconKey)
   final List<CommandButton> _defaultActionCommands = [
     CommandButton(
         label: 'STOP',
         command: 'stop',
-        iconCodePoint: Icons.stop.codePoint.toString()),
+        iconKey: 'stop'),
     CommandButton(
         label: 'EMERGENCY STOP',
         command: 'emergency_stop',
-        iconCodePoint: Icons.warning.codePoint.toString()),
+        iconKey: 'warning'),
   ];
 
   List<CommandButton> _customDpadCommands = [];
@@ -245,7 +288,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
   // Builds the D-pad with dynamically loaded buttons
   Widget _buildDpad(BuildContext context) {
-    // Find the buttons for forward, backward, left, right, and center stop
+    // Look up commands by their unique 'command' value
     final CommandButton? forward = _customDpadCommands.firstWhereOrNull(
         (cmd) => cmd.command.toLowerCase() == 'forward');
     final CommandButton? backward = _customDpadCommands.firstWhereOrNull(
@@ -422,7 +465,10 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
   }
 }
 
+// ====================================================================
 // --- Extension to find the first element or return null ---
+// (Needed because firstWhereOrNull is not in core Dart)
+// ====================================================================
 extension IterableExtension<T> on Iterable<T> {
   T? firstWhereOrNull(bool Function(T element) test) {
     for (final element in this) {
@@ -435,8 +481,9 @@ extension IterableExtension<T> on Iterable<T> {
 }
 
 
+// ====================================================================
 // --- Customization Dialog Implementation ---
-// (Needs to be a separate StateFulWidget to manage temporary changes)
+// ====================================================================
 class _CustomizationDialog extends StatefulWidget {
   final List<CommandButton> dpadCommands;
   final List<CommandButton> actionCommands;
@@ -604,7 +651,9 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
   }
 }
 
+// ====================================================================
 // --- Button Edit Form (Inner Dialog) ---
+// ====================================================================
 class _ButtonEditForm extends StatefulWidget {
   final CommandButton? button;
   final Function(CommandButton) onSave;
@@ -619,15 +668,16 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _labelController;
   late TextEditingController _commandController;
-  late TextEditingController _iconController;
+  // CHANGED: Use iconKeyController instead of iconController
+  late TextEditingController _iconKeyController; 
   late TextEditingController _imageController;
 
-  // A few common icons for easy selection
+  // A few common icons for easy selection (NOW USING KEYS)
   final Map<String, IconData> _suggestedIcons = {
-    'Light On': Icons.lightbulb,
-    'Light Off': Icons.lightbulb_outline,
-    'Auto': Icons.assistant_photo,
-    'Run Script': Icons.code,
+    'lightbulb': SupportedIcons.iconMap['lightbulb']!,
+    'assistant_photo': SupportedIcons.iconMap['assistant_photo']!,
+    'code': SupportedIcons.iconMap['code']!,
+    'home': SupportedIcons.iconMap['home']!,
   };
 
   @override
@@ -636,8 +686,9 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
     _labelController = TextEditingController(text: widget.button?.label ?? '');
     _commandController =
         TextEditingController(text: widget.button?.command ?? '');
-    _iconController =
-        TextEditingController(text: widget.button?.iconCodePoint ?? '');
+    // CHANGED: Initialize with the iconKey instead of iconCodePoint
+    _iconKeyController =
+        TextEditingController(text: widget.button?.iconKey ?? ''); 
     _imageController =
         TextEditingController(text: widget.button?.imageUrl ?? '');
   }
@@ -646,7 +697,8 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
   void dispose() {
     _labelController.dispose();
     _commandController.dispose();
-    _iconController.dispose();
+    // CHANGED: Dispose the new controller
+    _iconKeyController.dispose(); 
     _imageController.dispose();
     super.dispose();
   }
@@ -656,8 +708,9 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
       final newButton = CommandButton(
         label: _labelController.text,
         command: _commandController.text,
-        iconCodePoint:
-            _iconController.text.isNotEmpty ? _iconController.text : null,
+        // CHANGED: Save the iconKey
+        iconKey:
+            _iconKeyController.text.isNotEmpty ? _iconKeyController.text : null,
         imageUrl:
             _imageController.text.isNotEmpty ? _imageController.text : null,
       );
@@ -665,15 +718,18 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
     }
   }
 
-  void _selectIcon(IconData iconData) {
+  // CHANGED: Select icon by its string key
+  void _selectIcon(String iconKey) {
     setState(() {
-      _iconController.text = iconData.codePoint.toString();
+      _iconKeyController.text = iconKey;
       _imageController.clear(); // Clear image if an icon is selected
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final IconData? currentIcon = SupportedIcons.getIcon(_iconKeyController.text);
+    
     return AlertDialog(
       title: Text(widget.button == null ? "Add New Button" : "Edit Button"),
       content: Form(
@@ -702,23 +758,21 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
               ),
               const SizedBox(height: 15),
 
-              // --- Icon Selection Section ---
+              // --- Icon Selection Section (CRITICAL CHANGE) ---
               const Text('Visual Design (Choose Icon or Image URL)', style: TextStyle(fontWeight: FontWeight.bold)),
               TextFormField(
-                controller: _iconController,
+                controller: _iconKeyController,
                 decoration: InputDecoration(
-                  labelText: "Material Icon CodePoint",
-                  hintText: "e.g., 59473 (for Icons.home)",
-                  suffixIcon: _iconController.text.isNotEmpty
+                  labelText: "Material Icon Key", // CHANGED Label
+                  hintText: "e.g., 'home' or 'camera'",
+                  suffixIcon: _iconKeyController.text.isNotEmpty
                       ? Icon(
-                          IconData(int.tryParse(_iconController.text) ?? 0,
-                              fontFamily: 'MaterialIcons'),
+                          currentIcon ?? Icons.help, // Get IconData from the CONST map!
                           color: Colors.blue)
                       : null,
                 ),
                 readOnly: true,
                 onTap: () async {
-                  // In a real app, you'd use an icon picker. Here, we'll show a sample.
                   _showIconPicker(context);
                 },
               ),
@@ -730,7 +784,8 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
                     .map((entry) => ActionChip(
                           avatar: Icon(entry.value, size: 18),
                           label: Text(entry.key),
-                          onPressed: () => _selectIcon(entry.value),
+                          // CHANGED: Call _selectIcon with the key
+                          onPressed: () => _selectIcon(SupportedIcons.getKey(entry.value)!), 
                         ))
                     .toList(),
               ),
@@ -744,7 +799,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
                     hintText: "e.g., https://example.com/robot.png"),
                 onChanged: (value) {
                   if (value.isNotEmpty) {
-                    _iconController.clear(); // Clear icon if an image is used
+                    _iconKeyController.clear(); // Clear icon key if an image is used
                   }
                   setState(() {});
                 },
@@ -782,7 +837,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
     );
   }
 
-  // Simplified Icon Picker for demonstration
+  // CHANGED: Icon Picker now uses the SupportedIcons map
   void _showIconPicker(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -790,18 +845,11 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
         return GridView.count(
           crossAxisCount: 6,
           padding: const EdgeInsets.all(10),
-          children: [
-            Icons.home,
-            Icons.power_settings_new,
-            Icons.sensors,
-            Icons.camera_alt,
-            Icons.build,
-            Icons.lightbulb,
-          ].map((icon) {
+          children: SupportedIcons.iconMap.entries.map((entry) { // Iterate over the full CONST map
             return IconButton(
-              icon: Icon(icon, size: 36),
+              icon: Icon(entry.value, size: 36),
               onPressed: () {
-                _selectIcon(icon);
+                _selectIcon(entry.key); // Select the KEY
                 Navigator.pop(context);
               },
             );
