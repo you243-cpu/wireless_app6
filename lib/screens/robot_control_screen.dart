@@ -1,16 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert'; // For encoding/decoding JSON
-// Ensure you also have collection (or another package with firstWhereOrNull)
-// or just rely on the extension defined later.
+import 'dart:convert';
+import 'dart:async'; // For Future.delayed during playback
+
+// ====================================================================
+// --- New Models for Recorded Movement Sequence ---
+// ====================================================================
+
+// Stores a single command and the time delay (in ms) before it runs.
+class SequenceCommand {
+  final String command;
+  final int delayMs;
+
+  SequenceCommand({required this.command, required this.delayMs});
+
+  Map<String, dynamic> toJson() => {
+        'command': command,
+        'delayMs': delayMs,
+      };
+
+  factory SequenceCommand.fromJson(Map<String, dynamic> json) => SequenceCommand(
+        command: json['command'] as String,
+        delayMs: json['delayMs'] as int,
+      );
+}
+
+// Stores an entire named sequence of commands.
+class MovementSequence {
+  final String name;
+  final List<SequenceCommand> commands;
+
+  MovementSequence({required this.name, required this.commands});
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'commands': commands.map((c) => c.toJson()).toList(),
+      };
+
+  factory MovementSequence.fromJson(Map<String, dynamic> json) => MovementSequence(
+        name: json['name'] as String,
+        commands: (json['commands'] as List)
+            .map((item) => SequenceCommand.fromJson(item))
+            .toList(),
+      );
+}
 
 // ====================================================================
 // --- CONSTANT ICON MAP (The FIX for Tree Shaking) ---
 // ====================================================================
 
-// Define a static class with a constant map of string keys to IconData objects.
-// The compiler sees all these constant IconData objects and includes them.
 class SupportedIcons {
   static const Map<String, IconData> iconMap = {
     'arrow_upward': Icons.arrow_upward,
@@ -29,12 +68,13 @@ class SupportedIcons {
     'sensors': Icons.sensors,
     'camera': Icons.camera_alt,
     'build': Icons.build,
-    // Add more icons here to make them selectable by the user
+    'play_circle': Icons.play_circle,
+    'settings_power': Icons.settings_power,
+    'radio': Icons.radio_button_checked,
   };
 
   // Helper to get the actual IconData using the global map
   static IconData? getIcon(String key) {
-    // Returns the IconData object or null if the key doesn't exist.
     return iconMap[key];
   }
 
@@ -52,13 +92,13 @@ class SupportedIcons {
 class CommandButton {
   final String label;
   final String command;
-  final String? iconKey; // CHANGED: Stored as a string KEY for SharedPreferences
+  final String? iconKey;
   final String? imageUrl;
 
   CommandButton({
     required this.label,
     required this.command,
-    this.iconKey, // Use iconKey instead of codePoint
+    this.iconKey,
     this.imageUrl,
   });
 
@@ -66,7 +106,7 @@ class CommandButton {
   Map<String, dynamic> toJson() => {
         'label': label,
         'command': command,
-        'iconKey': iconKey, // Save the key
+        'iconKey': iconKey,
         'imageUrl': imageUrl,
       };
 
@@ -74,18 +114,44 @@ class CommandButton {
   factory CommandButton.fromJson(Map<String, dynamic> json) => CommandButton(
         label: json['label'] as String,
         command: json['command'] as String,
-        iconKey: json['iconKey'] as String?, // Load the key
+        iconKey: json['iconKey'] as String?,
         imageUrl: json['imageUrl'] as String?,
       );
 
-  // Helper to get the actual IconData from the stored string key (NOW CONSTANT)
-  // This references the constant map, eliminating the tree-shaking error.
+  // Helper to get the actual IconData from the stored string key
   IconData? get iconData => iconKey != null ? SupportedIcons.getIcon(iconKey!) : null;
 }
 
 // ====================================================================
-// --- Main Control Screen ---
+// --- Main Application Setup ---
 // ====================================================================
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Robot Controller',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.blueGrey,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
+      home: const RobotControlScreen(),
+    );
+  }
+}
+
+// ====================================================================
+// --- Main Control Screen (Updated for Recording) ---
+// ====================================================================
+enum RecordingState { stopped, recording, paused }
+
 class RobotControlScreen extends StatefulWidget {
   const RobotControlScreen({super.key});
 
@@ -95,55 +161,51 @@ class RobotControlScreen extends StatefulWidget {
 
 class _RobotControlScreenState extends State<RobotControlScreen> {
   static const String _prefsKey = 'customRobotCommands';
+  static const String _sequencePrefsKey = 'robotMovementSequences'; // Key for sequences
   final String espIP = "192.168.4.1"; // ESP8266 IP
 
-  // Default D-pad commands (NOW USING iconKey)
+  // Default D-pad commands
   final List<CommandButton> _defaultDpadCommands = [
     CommandButton(
-        label: 'Forward',
-        command: 'forward',
-        iconKey: 'arrow_upward'),
+        label: 'Forward', command: 'forward', iconKey: 'arrow_upward'),
     CommandButton(
-        label: 'Backward',
-        command: 'backward',
-        iconKey: 'arrow_downward'),
-    CommandButton(
-        label: 'Left',
-        command: 'left',
-        iconKey: 'arrow_back'),
-    CommandButton(
-        label: 'Right',
-        command: 'right',
-        iconKey: 'arrow_forward'),
-    CommandButton(
-        label: 'STOP',
-        command: 'stop',
-        iconKey: 'pause'),
+        label: 'Backward', command: 'backward', iconKey: 'arrow_downward'),
+    CommandButton(label: 'Left', command: 'left', iconKey: 'arrow_back'),
+    CommandButton(label: 'Right', command: 'right', iconKey: 'arrow_forward'),
+    CommandButton(label: 'STOP', command: 'stop', iconKey: 'pause'),
   ];
 
-  // Default Action commands (NOW USING iconKey)
+  // Default Action commands
   final List<CommandButton> _defaultActionCommands = [
-    CommandButton(
-        label: 'STOP',
-        command: 'stop',
-        iconKey: 'stop'),
-    CommandButton(
-        label: 'EMERGENCY STOP',
-        command: 'emergency_stop',
-        iconKey: 'warning'),
+    CommandButton(label: 'Lights On', command: 'lights_on', iconKey: 'lightbulb'),
+    CommandButton(label: 'EMERGENCY STOP', command: 'emergency_stop', iconKey: 'warning'),
   ];
 
   List<CommandButton> _customDpadCommands = [];
   List<CommandButton> _customActionCommands = [];
+  List<MovementSequence> _savedSequences = [];
   bool _isLoading = true;
+
+  // --- Recording State Variables ---
+  RecordingState _recordingState = RecordingState.stopped;
+  List<SequenceCommand> _currentRecording = [];
+  DateTime? _lastCommandTime;
 
   @override
   void initState() {
     super.initState();
-    _loadCustomCommands();
+    _loadAllData();
   }
 
   // --- Persistence Handlers ---
+
+  Future<void> _loadAllData() async {
+    await _loadCustomCommands();
+    await _loadSequences();
+    setState(() {
+      _isLoading = false;
+    });
+  }
 
   Future<void> _loadCustomCommands() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -159,18 +221,12 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
             .map((item) => CommandButton.fromJson(item))
             .toList();
       } catch (e) {
-        // If decoding fails, fall back to defaults
         _setDefaults();
         _showSnackBar("⚠️ Failed to load custom settings. Restored to defaults.");
       }
     } else {
-      // No saved data, set to default
       _setDefaults();
     }
-
-    setState(() {
-      _isLoading = false;
-    });
   }
 
   Future<void> _saveCustomCommands() async {
@@ -187,47 +243,187 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
   void _setDefaults() {
     _customDpadCommands = List.from(_defaultDpadCommands);
     _customActionCommands = List.from(_defaultActionCommands);
-    _saveCustomCommands(); // Save the defaults so they persist
+    _saveCustomCommands();
+  }
+
+  Future<void> _loadSequences() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String? jsonString = prefs.getString(_sequencePrefsKey);
+
+    if (jsonString != null && jsonString.isNotEmpty) {
+      try {
+        final List<dynamic> jsonList = json.decode(jsonString);
+        _savedSequences = jsonList.map((item) => MovementSequence.fromJson(item)).toList();
+      } catch (e) {
+        _savedSequences = [];
+        // Show snackbar is handled by _loadAllData if needed, but keeping load errors quiet here.
+      }
+    }
+  }
+
+  Future<void> _saveSequences() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final List<Map<String, dynamic>> jsonList =
+        _savedSequences.map((s) => s.toJson()).toList();
+    await prefs.setString(_sequencePrefsKey, json.encode(jsonList));
   }
 
   // --- Communication & Feedback ---
 
-  // Helper to send commands to the ESP8266 and handle the response
   Future<void> sendCommand(String command) async {
-    // Basic validation to prevent empty commands
     if (command.isEmpty) {
       _showSnackBar("❌ Command string is empty.");
       return;
     }
 
     try {
-      // The ESP8266 IP and command structure are kept the same
       final url = Uri.parse("http://$espIP/command?action=$command");
       final response = await http.get(url).timeout(const Duration(seconds: 5));
 
       String message;
       if (response.statusCode == 200) {
         message =
-            "✅ Command '${command}' sent. Response: ${response.body.isNotEmpty ? response.body : 'OK'}";
+            "✅ Command '$command' sent. Response: ${response.body.isNotEmpty ? response.body : 'OK'}";
       } else {
         message =
             "❌ Failed to send command. Status: ${response.statusCode}. Response: ${response.body}";
       }
-
       _showSnackBar(message);
     } catch (e) {
       _showSnackBar("❌ Error sending command to $espIP: $e");
     }
   }
 
-  // Helper to show a SnackBar with feedback
   void _showSnackBar(String message) {
     if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
     }
   }
+
+  // --- Recording Logic ---
+
+  bool _isMovementCommand(String command) {
+    final movementCommands = ['forward', 'backward', 'left', 'right', 'stop'];
+    return movementCommands.contains(command.toLowerCase());
+  }
+
+  Future<void> _sendCommandAndRecord(String command) async {
+    // 1. Send the command immediately
+    await sendCommand(command);
+
+    // 2. Record the command if active and it's a movement command
+    if (_recordingState == RecordingState.recording && _isMovementCommand(command)) {
+      final now = DateTime.now();
+      int delayMs = 0;
+
+      if (_lastCommandTime != null) {
+        delayMs = now.difference(_lastCommandTime!).inMilliseconds;
+      }
+
+      _currentRecording.add(SequenceCommand(command: command, delayMs: delayMs));
+      _lastCommandTime = now;
+      _showSnackBar("Command '$command' recorded with ${delayMs}ms delay. Total steps: ${_currentRecording.length}");
+    }
+  }
+
+  void _toggleRecording() {
+    setState(() {
+      if (_recordingState == RecordingState.stopped) {
+        _recordingState = RecordingState.recording;
+        _currentRecording = [];
+        _lastCommandTime = DateTime.now();
+        _showSnackBar("🔴 Recording started!");
+      } else if (_recordingState == RecordingState.recording) {
+        _recordingState = RecordingState.paused;
+        _lastCommandTime = null;
+        _showSnackBar("⏸️ Recording paused.");
+      } else if (_recordingState == RecordingState.paused) {
+        _recordingState = RecordingState.recording;
+        _lastCommandTime = DateTime.now();
+        _showSnackBar("▶️ Recording resumed.");
+      }
+    });
+  }
+
+  void _endRecording() {
+    setState(() {
+      _recordingState = RecordingState.stopped;
+    });
+
+    if (_currentRecording.length <= 1) {
+      _showSnackBar("Recording ended. Sequence too short to save (min 2 steps required).");
+      _currentRecording = [];
+      return;
+    }
+
+    _showSaveSequenceDialog(context);
+  }
+
+  Future<void> _showSaveSequenceDialog(BuildContext context) async {
+    final nameController = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Save Movement Sequence'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(labelText: 'Sequence Name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _currentRecording = [];
+              Navigator.pop(context);
+            },
+            child: const Text('Discard'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.trim().isNotEmpty) {
+                final newSequence = MovementSequence(
+                  name: nameController.text.trim(),
+                  commands: _currentRecording,
+                );
+                setState(() {
+                  _savedSequences.add(newSequence);
+                  _saveSequences();
+                });
+                _currentRecording = [];
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- Playback Logic ---
+
+  Future<void> _playbackSequence(MovementSequence sequence) async {
+    _showSnackBar("▶️ Starting playback for '${sequence.name}'...");
+    
+    for (int i = 0; i < sequence.commands.length; i++) {
+      final cmd = sequence.commands[i];
+      
+      if (cmd.delayMs > 0) {
+        await Future.delayed(Duration(milliseconds: cmd.delayMs));
+      }
+
+      await sendCommand(cmd.command);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        _showSnackBar("Executing: ${cmd.command}");
+      }
+    }
+    _showSnackBar("✅ Playback for '${sequence.name}' finished.");
+  }
+
 
   // --- UI Builders ---
 
@@ -239,6 +435,13 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
         backgroundColor: Colors.blueGrey[800],
         foregroundColor: Colors.white,
         actions: [
+          // Button for Playback Dialog
+          IconButton(
+            icon: const Icon(Icons.play_circle_fill),
+            tooltip: 'Play Saved Sequence',
+            onPressed: () => _openPlaybackDialog(context),
+          ),
+          // Button for Customization Dialog
           IconButton(
             icon: const Icon(Icons.settings),
             tooltip: 'Customize Buttons',
@@ -255,6 +458,10 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
+                    // --- Recording Status Section ---
+                    _buildRecordingPanel(),
+                    const SizedBox(height: 30),
+
                     // --- D-pad Control Section ---
                     Text(
                       "Directional Controls",
@@ -286,9 +493,76 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     );
   }
 
+  // UI for the recording status and controls
+  Widget _buildRecordingPanel() {
+    Color statusColor = Colors.grey;
+    String statusText = "Ready to Record";
+    IconData statusIcon = Icons.radio_button_off;
+    String countText = "";
+
+    if (_recordingState == RecordingState.recording) {
+      statusColor = Colors.red;
+      statusText = "Recording Movement...";
+      statusIcon = Icons.fiber_manual_record;
+      countText = " (${_currentRecording.length} steps)";
+    } else if (_recordingState == RecordingState.paused) {
+      statusColor = Colors.orange;
+      statusText = "Recording Paused";
+      statusIcon = Icons.pause_circle_filled;
+      countText = " (${_currentRecording.length} steps)";
+    }
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(statusIcon, color: statusColor, size: 28),
+            const SizedBox(width: 8),
+            Text(
+              statusText + countText,
+              style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 10,
+          children: [
+            // START RECORDING button
+            if (_recordingState == RecordingState.stopped)
+              FilledButton.icon(
+                icon: const Icon(Icons.videocam),
+                label: const Text("Start Recording"),
+                onPressed: _toggleRecording,
+                style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+              ),
+            
+            // PAUSE / RESUME button
+            if (_recordingState != RecordingState.stopped)
+              FilledButton.icon(
+                icon: Icon(_recordingState == RecordingState.recording ? Icons.pause : Icons.play_arrow),
+                label: Text(_recordingState == RecordingState.recording ? "Pause" : "Resume"),
+                onPressed: _toggleRecording,
+                style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
+              ),
+            
+            // END RECORDING button
+            if (_recordingState != RecordingState.stopped)
+              FilledButton.icon(
+                icon: const Icon(Icons.stop),
+                label: const Text("End Recording"),
+                onPressed: _endRecording,
+                style: FilledButton.styleFrom(backgroundColor: Colors.blueGrey),
+              ),
+          ],
+        )
+      ],
+    );
+  }
+
   // Builds the D-pad with dynamically loaded buttons
   Widget _buildDpad(BuildContext context) {
-    // Look up commands by their unique 'command' value
     final CommandButton? forward = _customDpadCommands.firstWhereOrNull(
         (cmd) => cmd.command.toLowerCase() == 'forward');
     final CommandButton? backward = _customDpadCommands.firstWhereOrNull(
@@ -327,7 +601,6 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
   // Builds the other custom action buttons dynamically
   Widget _buildActionButtons(BuildContext context) {
-    // Filter out the dpad commands already used above
     final List<CommandButton> actionButtons = _customActionCommands
         .where((cmd) => !_defaultDpadCommands.any((d) => d.command == cmd.command))
         .toList();
@@ -342,17 +615,18 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     );
   }
 
-  // Reusable widget for circular D-pad buttons
+  // Reusable widget for circular D-pad buttons (Calls the recording wrapper)
   Widget _buildCircularButton(
       CommandButton? command, BuildContext context,
       {bool isCritical = false}) {
-    if (command == null) return const SizedBox(width: 80, height: 80); // Placeholder
+    if (command == null) return const SizedBox(width: 80, height: 80);
 
     return SizedBox(
       width: 90,
       height: 90,
       child: ElevatedButton(
-        onPressed: () => sendCommand(command.command),
+        // Use the recording wrapper for directional and central stop buttons
+        onPressed: () => _sendCommandAndRecord(command.command),
         style: ElevatedButton.styleFrom(
           shape: const CircleBorder(),
           backgroundColor: isCritical ? Colors.red.shade700 : Colors.blue.shade700,
@@ -364,11 +638,12 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     );
   }
 
-  // Reusable widget for styled rectangular action buttons
+  // Reusable widget for styled rectangular action buttons (Calls original sendCommand)
   Widget _buildStyledActionButton(
       CommandButton command, BuildContext context) {
     final bool isEmergency = command.command.toLowerCase().contains('emergency');
     return ElevatedButton(
+      // Non-movement commands just call the original sendCommand
       onPressed: () => sendCommand(command.command),
       style: ElevatedButton.styleFrom(
         backgroundColor: isEmergency ? Colors.red.shade900 : Colors.teal,
@@ -395,7 +670,6 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     if (command.iconData != null) {
       return Icon(command.iconData, size: size);
     } else if (command.imageUrl != null && command.imageUrl!.isNotEmpty) {
-      // NOTE: Using a NetworkImage here requires the image URL to be accessible!
       return ClipRRect(
         borderRadius: BorderRadius.circular(size / 2),
         child: Image.network(
@@ -408,7 +682,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
         ),
       );
     } else {
-      return Text(command.label.substring(0, 1).toUpperCase(),
+      return Text(command.label.isNotEmpty ? command.label.substring(0, 1).toUpperCase() : '?',
           style: TextStyle(fontSize: size * 0.5, fontWeight: FontWeight.bold));
     }
   }
@@ -419,7 +693,6 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        // Use a temporary stateful widget for the dialog to allow button addition/removal
         return _CustomizationDialog(
           dpadCommands: List.from(_customDpadCommands),
           actionCommands: List.from(_customActionCommands),
@@ -433,6 +706,25 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
           },
         );
       },
+    );
+  }
+
+  void _openPlaybackDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => _PlaybackDialog(
+        sequences: _savedSequences,
+        onPlay: (sequence) {
+          Navigator.pop(context); // Close dialog
+          _playbackSequence(sequence);
+        },
+        onDelete: (sequence) {
+          setState(() {
+            _savedSequences.remove(sequence);
+            _saveSequences();
+          });
+        },
+      ),
     );
   }
 
@@ -466,17 +758,98 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 }
 
 // ====================================================================
-// --- Extension to find the first element or return null ---
-// (Needed because firstWhereOrNull is not in core Dart)
+// --- Playback Dialog Implementation ---
 // ====================================================================
-extension IterableExtension<T> on Iterable<T> {
-  T? firstWhereOrNull(bool Function(T element) test) {
-    for (final element in this) {
-      if (test(element)) {
-        return element;
-      }
-    }
-    return null;
+class _PlaybackDialog extends StatefulWidget {
+  final List<MovementSequence> sequences;
+  final Function(MovementSequence) onPlay;
+  final Function(MovementSequence) onDelete;
+
+  const _PlaybackDialog({
+    required this.sequences,
+    required this.onPlay,
+    required this.onDelete,
+  });
+
+  @override
+  State<_PlaybackDialog> createState() => __PlaybackDialogState();
+}
+
+class __PlaybackDialogState extends State<_PlaybackDialog> {
+  late List<MovementSequence> _displaySequences;
+
+  @override
+  void initState() {
+    super.initState();
+    // Use a temporary list derived from the widget's list for display
+    _displaySequences = List.from(widget.sequences);
+  }
+
+  // Deletes the sequence and calls the parent's handler
+  void _deleteSequence(MovementSequence sequence) {
+    setState(() {
+      _displaySequences.removeWhere((s) => s.name == sequence.name);
+    });
+    widget.onDelete(sequence); // Persist the change
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text("Recorded Movement Sequences"),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: _displaySequences.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Center(
+                  child: Text('No movement sequences saved yet. Start recording one!', 
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                itemCount: _displaySequences.length,
+                itemBuilder: (context, index) {
+                  final sequence = _displaySequences[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(vertical: 6.0),
+                    elevation: 2,
+                    child: ListTile(
+                      tileColor: Colors.blueGrey.shade50,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      leading: const Icon(Icons.movie, color: Colors.blue),
+                      title: Text(sequence.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text("${sequence.commands.length} steps | Duration: ${(sequence.commands.fold(0, (sum, cmd) => sum + cmd.delayMs) / 1000).toStringAsFixed(1)}s"),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.play_arrow, color: Colors.green),
+                            tooltip: 'Start Playback',
+                            onPressed: () => widget.onPlay(sequence),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            tooltip: 'Delete Sequence',
+                            onPressed: () => _deleteSequence(sequence),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          child: const Text('Close'),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
   }
 }
 
@@ -570,10 +943,12 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
                 child: Text('No custom buttons. Click "Add New Action" to create one.'),
               ),
             const SizedBox(height: 10),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text("Add New Action"),
-              onPressed: () => _editButton(null, _tempActionCommands),
+            Center(
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text("Add New Action"),
+                onPressed: () => _editButton(null, _tempActionCommands),
+              ),
             ),
           ],
         ),
@@ -668,8 +1043,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _labelController;
   late TextEditingController _commandController;
-  // CHANGED: Use iconKeyController instead of iconController
-  late TextEditingController _iconKeyController; 
+  late TextEditingController _iconKeyController;
   late TextEditingController _imageController;
 
   // A few common icons for easy selection (NOW USING KEYS)
@@ -686,9 +1060,8 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
     _labelController = TextEditingController(text: widget.button?.label ?? '');
     _commandController =
         TextEditingController(text: widget.button?.command ?? '');
-    // CHANGED: Initialize with the iconKey instead of iconCodePoint
     _iconKeyController =
-        TextEditingController(text: widget.button?.iconKey ?? ''); 
+        TextEditingController(text: widget.button?.iconKey ?? '');
     _imageController =
         TextEditingController(text: widget.button?.imageUrl ?? '');
   }
@@ -697,8 +1070,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
   void dispose() {
     _labelController.dispose();
     _commandController.dispose();
-    // CHANGED: Dispose the new controller
-    _iconKeyController.dispose(); 
+    _iconKeyController.dispose();
     _imageController.dispose();
     super.dispose();
   }
@@ -708,7 +1080,6 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
       final newButton = CommandButton(
         label: _labelController.text,
         command: _commandController.text,
-        // CHANGED: Save the iconKey
         iconKey:
             _iconKeyController.text.isNotEmpty ? _iconKeyController.text : null,
         imageUrl:
@@ -718,7 +1089,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
     }
   }
 
-  // CHANGED: Select icon by its string key
+  // Select icon by its string key
   void _selectIcon(String iconKey) {
     setState(() {
       _iconKeyController.text = iconKey;
@@ -758,16 +1129,16 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
               ),
               const SizedBox(height: 15),
 
-              // --- Icon Selection Section (CRITICAL CHANGE) ---
+              // --- Icon Selection Section ---
               const Text('Visual Design (Choose Icon or Image URL)', style: TextStyle(fontWeight: FontWeight.bold)),
               TextFormField(
                 controller: _iconKeyController,
                 decoration: InputDecoration(
-                  labelText: "Material Icon Key", // CHANGED Label
+                  labelText: "Material Icon Key",
                   hintText: "e.g., 'home' or 'camera'",
                   suffixIcon: _iconKeyController.text.isNotEmpty
                       ? Icon(
-                          currentIcon ?? Icons.help, // Get IconData from the CONST map!
+                          currentIcon ?? Icons.help,
                           color: Colors.blue)
                       : null,
                 ),
@@ -784,8 +1155,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
                     .map((entry) => ActionChip(
                           avatar: Icon(entry.value, size: 18),
                           label: Text(entry.key),
-                          // CHANGED: Call _selectIcon with the key
-                          onPressed: () => _selectIcon(SupportedIcons.getKey(entry.value)!), 
+                          onPressed: () => _selectIcon(SupportedIcons.getKey(entry.value)!),
                         ))
                     .toList(),
               ),
@@ -799,7 +1169,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
                     hintText: "e.g., https://example.com/robot.png"),
                 onChanged: (value) {
                   if (value.isNotEmpty) {
-                    _iconKeyController.clear(); // Clear icon key if an image is used
+                    _iconKeyController.clear();
                   }
                   setState(() {});
                 },
@@ -837,7 +1207,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
     );
   }
 
-  // CHANGED: Icon Picker now uses the SupportedIcons map
+  // Icon Picker uses the SupportedIcons map
   void _showIconPicker(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -845,11 +1215,11 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
         return GridView.count(
           crossAxisCount: 6,
           padding: const EdgeInsets.all(10),
-          children: SupportedIcons.iconMap.entries.map((entry) { // Iterate over the full CONST map
+          children: SupportedIcons.iconMap.entries.map((entry) {
             return IconButton(
               icon: Icon(entry.value, size: 36),
               onPressed: () {
-                _selectIcon(entry.key); // Select the KEY
+                _selectIcon(entry.key);
                 Navigator.pop(context);
               },
             );
@@ -857,5 +1227,20 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
         );
       },
     );
+  }
+}
+
+// ====================================================================
+// --- Extension to find the first element or return null ---
+// (Needed because firstWhereOrNull is not in core Dart)
+// ====================================================================
+extension IterableExtension<T> on Iterable<T> {
+  T? firstWhereOrNull(bool Function(T element) test) {
+    for (final element in this) {
+      if (test(element)) {
+        return element;
+      }
+    }
+    return null;
   }
 }
