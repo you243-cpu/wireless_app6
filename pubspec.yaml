@@ -37,3 +37,4 @@ flutter:
   # If it causes no issue, leave it. If it fails, remove it too.
   generate: true
   # REMOVED: tree-shake-icons: false
+  tree-shake-icons: false 
