@@ -1021,7 +1021,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
   late TextEditingController _labelController;
   late TextEditingController _commandController;
   late TextEditingController _iconKeyController;
-  late TextEditingController _imageController;
+  late TextEditingController _imageController; // Corrected from TextController
 
   // A few common icons for easy selection (NOW USING KEYS)
   final Map<String, IconData> _suggestedIcons = {
@@ -1039,8 +1039,9 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
         TextEditingController(text: widget.button?.command ?? '');
     _iconKeyController =
         TextEditingController(text: widget.button?.iconKey ?? '');
+    // THIS LINE WAS CORRECTED: Used TextEditingController instead of TextController
     _imageController =
-        TextController(text: widget.button?.imageUrl ?? '');
+        TextEditingController(text: widget.button?.imageUrl ?? '');
   }
 
   @override
