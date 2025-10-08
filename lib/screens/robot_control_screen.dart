@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'dart:async'; // For Future.delayed during playback
 
 // ====================================================================
-// --- New Models for Recorded Movement Sequence ---
+// --- Models for Recorded Movement Sequence ---
 // ====================================================================
 
 // Stores a single command and the time delay (in ms) before it runs.
@@ -47,7 +47,7 @@ class MovementSequence {
 }
 
 // ====================================================================
-// --- CONSTANT ICON MAP (The FIX for Tree Shaking) ---
+// --- CONSTANT ICON MAP (Helper for Storing/Retrieving Icons) ---
 // ====================================================================
 
 class SupportedIcons {
@@ -80,9 +80,13 @@ class SupportedIcons {
 
   // Helper to get the string key from an IconData object
   static String? getKey(IconData icon) {
-    return iconMap.entries
-        .firstWhereOrNull((entry) => entry.value.codePoint == icon.codePoint)
-        ?.key;
+    // Note: This needs to iterate through all entries to find a match, less efficient but necessary.
+    for (var entry in iconMap.entries) {
+      if (entry.value.codePoint == icon.codePoint) {
+        return entry.key;
+      }
+    }
+    return null;
   }
 }
 
@@ -123,32 +127,7 @@ class CommandButton {
 }
 
 // ====================================================================
-// --- Main Application Setup ---
-// ====================================================================
-void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Robot Controller',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blueGrey,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      home: const RobotControlScreen(),
-    );
-  }
-}
-
-// ====================================================================
-// --- Main Control Screen (Updated for Recording) ---
+// --- Main Control Screen (Exported for Dashboard) ---
 // ====================================================================
 enum RecordingState { stopped, recording, paused }
 
@@ -162,7 +141,7 @@ class RobotControlScreen extends StatefulWidget {
 class _RobotControlScreenState extends State<RobotControlScreen> {
   static const String _prefsKey = 'customRobotCommands';
   static const String _sequencePrefsKey = 'robotMovementSequences'; // Key for sequences
-  final String espIP = "192.168.4.1"; // ESP8266 IP
+  final String espIP = "192.168.4.1"; // ESP8266 IP (Same as Dashboard)
 
   // Default D-pad commands
   final List<CommandButton> _defaultDpadCommands = [
@@ -256,7 +235,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
         _savedSequences = jsonList.map((item) => MovementSequence.fromJson(item)).toList();
       } catch (e) {
         _savedSequences = [];
-        // Show snackbar is handled by _loadAllData if needed, but keeping load errors quiet here.
+        // Quietly fail for sequence loading errors if needed.
       }
     }
   }
@@ -561,18 +540,23 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     );
   }
 
+  // Finds a CommandButton by its command string, returns null if not found.
+  CommandButton? _findCommand(String command, List<CommandButton> list) {
+    for (var cmd in list) {
+      if (cmd.command.toLowerCase() == command.toLowerCase()) {
+        return cmd;
+      }
+    }
+    return null;
+  }
+
   // Builds the D-pad with dynamically loaded buttons
   Widget _buildDpad(BuildContext context) {
-    final CommandButton? forward = _customDpadCommands.firstWhereOrNull(
-        (cmd) => cmd.command.toLowerCase() == 'forward');
-    final CommandButton? backward = _customDpadCommands.firstWhereOrNull(
-        (cmd) => cmd.command.toLowerCase() == 'backward');
-    final CommandButton? left = _customDpadCommands.firstWhereOrNull(
-        (cmd) => cmd.command.toLowerCase() == 'left');
-    final CommandButton? right = _customDpadCommands.firstWhereOrNull(
-        (cmd) => cmd.command.toLowerCase() == 'right');
-    final CommandButton? centerStop = _customDpadCommands.firstWhereOrNull(
-        (cmd) => cmd.command.toLowerCase() == 'stop' && cmd.label.toLowerCase() == 'stop');
+    final CommandButton? forward = _findCommand('forward', _customDpadCommands);
+    final CommandButton? backward = _findCommand('backward', _customDpadCommands);
+    final CommandButton? left = _findCommand('left', _customDpadCommands);
+    final CommandButton? right = _findCommand('right', _customDpadCommands);
+    final CommandButton? centerStop = _findCommand('stop', _customDpadCommands);
 
     return Column(
       children: [
@@ -601,9 +585,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
   // Builds the other custom action buttons dynamically
   Widget _buildActionButtons(BuildContext context) {
-    final List<CommandButton> actionButtons = _customActionCommands
-        .where((cmd) => !_defaultDpadCommands.any((d) => d.command == cmd.command))
-        .toList();
+    final List<CommandButton> actionButtons = _customActionCommands.toList(); // All actions
 
     return Wrap(
       spacing: 15.0,
@@ -720,7 +702,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
         },
         onDelete: (sequence) {
           setState(() {
-            _savedSequences.remove(sequence);
+            _savedSequences.removeWhere((s) => s.name == sequence.name);
             _saveSequences();
           });
         },
@@ -785,14 +767,6 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
     _displaySequences = List.from(widget.sequences);
   }
 
-  // Deletes the sequence and calls the parent's handler
-  void _deleteSequence(MovementSequence sequence) {
-    setState(() {
-      _displaySequences.removeWhere((s) => s.name == sequence.name);
-    });
-    widget.onDelete(sequence); // Persist the change
-  }
-
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -834,7 +808,11 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
                           IconButton(
                             icon: const Icon(Icons.delete, color: Colors.red),
                             tooltip: 'Delete Sequence',
-                            onPressed: () => _deleteSequence(sequence),
+                            onPressed: () {
+                                // Since we pass the state update to the parent, we don't need a local setState for deletion here.
+                                // The parent will rebuild the widget list.
+                                widget.onDelete(sequence);
+                            },
                           ),
                         ],
                       ),
@@ -898,7 +876,7 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
                 listToModify.add(newButton);
               } else {
                 // Edit existing button
-                final index = listToModify.indexOf(button);
+                final index = listToModify.indexWhere((cmd) => cmd.command == button.command);
                 if (index != -1) {
                   listToModify[index] = newButton;
                 }
@@ -922,7 +900,7 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
           children: [
             // --- D-pad Customization ---
             Text(
-              "Directional Buttons (D-pad)",
+              "Directional Buttons (D-pad) - Tap to Edit",
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const Divider(),
@@ -931,11 +909,11 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
 
             // --- Action Buttons Customization ---
             Text(
-              "Action Buttons (Custom)",
+              "Action Buttons (Custom) - Edit or Delete",
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const Divider(),
-            _buildCommandList(_tempActionCommands, canAdd: true),
+            _buildCommandList(_tempActionCommands, canDelete: true),
 
             if (_tempActionCommands.isEmpty)
               const Padding(
@@ -967,7 +945,7 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
   }
 
   // Reusable widget to display and manage a list of CommandButtons
-  Widget _buildCommandList(List<CommandButton> commands, {bool canAdd = false}) {
+  Widget _buildCommandList(List<CommandButton> commands, {bool canDelete = false}) {
     return Column(
       children: commands.map((command) {
         return Card(
@@ -976,14 +954,11 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
             leading: _getButtonContent(command, size: 24),
             title: Text(command.label.isNotEmpty ? command.label : 'No Label'),
             subtitle: Text("Command: ${command.command}"),
+            onTap: () => _editButton(command, commands),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.blue),
-                  onPressed: () => _editButton(command, commands),
-                ),
-                if (canAdd) // Only allow deletion for custom action buttons
+                if (canDelete) // Only allow deletion for custom action buttons
                   IconButton(
                     icon: const Icon(Icons.delete, color: Colors.red),
                     onPressed: () {
@@ -992,6 +967,8 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
                       });
                     },
                   ),
+                if (!canDelete) // For D-pad, just show an edit icon
+                  const Icon(Icons.edit, color: Colors.blue),
               ],
             ),
           ),
@@ -1063,7 +1040,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
     _iconKeyController =
         TextEditingController(text: widget.button?.iconKey ?? '');
     _imageController =
-        TextEditingController(text: widget.button?.imageUrl ?? '');
+        TextController(text: widget.button?.imageUrl ?? '');
   }
 
   @override
