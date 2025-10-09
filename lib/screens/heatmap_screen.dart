@@ -380,6 +380,10 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   void _onMetricChanged(String newMetric) {
     setState(() {
       currentMetric = newMetric;
+      // Force 3D viewer to reload when metric changes
+      if (is3DView) {
+        _modelViewerKey = UniqueKey();
+      }
     });
     _updateGridAndValues();
     // Try generating PNG for this metric in background
