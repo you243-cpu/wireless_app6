@@ -1081,49 +1081,81 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
                   final sequence = _displaySequences[index];
                   final reverseSteps = widget.getReversedSequence(sequence.commands).length;
                   
-                  String subtitleText = "Reversible Path (${reverseSteps} steps)";
+                  // ** MODIFIED Status Text for Prominence **
+                  String statusText = "Steps: ${sequence.commands.length} | Reversible Path (${reverseSteps} steps)";
                   if (sequence.isLooped) {
-                    subtitleText = sequence.isIndefinite 
-                        ? "Indefinite Loop Active (Path <-> Reverse)" 
-                        : "Loops: ${sequence.loopCount} | Start: ${sequence.startReversed ? 'Reverse' : 'Normal'}";
+                    statusText = sequence.isIndefinite 
+                        ? "∞ Indefinite Loop (Path <-> Reverse)" 
+                        : "🔁 Loops: ${sequence.loopCount} | Start: ${sequence.startReversed ? 'Reverse' : 'Normal'}";
                   }
 
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 6.0),
-                    elevation: 2,
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ListTile(
-                          tileColor: Colors.teal.shade50, // Use theme color for tile
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0), // Compact padding
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          leading: const Icon(Icons.route, color: Colors.teal),
-                          title: Text(sequence.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text(subtitleText),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
+                        // --- START: Main Content Area (Replacing ListTile) ---
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              IconButton(
-                                icon: Icon(Icons.loop, color: sequence.isLooped ? Colors.purple.shade700 : Colors.grey),
-                                tooltip: 'Configure Looping',
-                                onPressed: () => _openLoopSettings(sequence),
+                              // 1. Path Name and Icon
+                              Row(
+                                children: [
+                                  const Icon(Icons.route, color: Colors.teal),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      sequence.name, 
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.play_arrow, color: Colors.green),
-                                tooltip: 'Start Playback',
-                                onPressed: () => widget.onPlay(sequence),
+                              const SizedBox(height: 10),
+                              
+                              // 2. STATUS TEXT (Now Prominently ABOVE Controls)
+                              Text(
+                                statusText, 
+                                style: TextStyle(
+                                  color: Colors.deepOrange.shade700, 
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                tooltip: 'Delete Path',
-                                onPressed: () {
-                                    widget.onDelete(sequence);
-                                },
+                              const SizedBox(height: 12),
+                              
+                              // 3. CONTROL BUTTONS (Row)
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(Icons.loop, color: sequence.isLooped ? Colors.purple.shade700 : Colors.grey),
+                                    tooltip: 'Configure Looping',
+                                    onPressed: () => _openLoopSettings(sequence),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.play_arrow, color: Colors.green),
+                                    tooltip: 'Start Playback',
+                                    onPressed: () => widget.onPlay(sequence),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    tooltip: 'Delete Path',
+                                    onPressed: () {
+                                        widget.onDelete(sequence);
+                                    },
+                                  ),
+                                ],
                               ),
                             ],
                           ),
                         ),
+                        // --- END: Main Content Area ---
                         
                         // --- START: Path Preview with text on top ---
                         Padding(
