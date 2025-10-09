@@ -160,14 +160,14 @@ class CommandButton {
         }
         return Color(int.parse(hex, radix: 16));
       } catch (_) {
-        return Colors.blue.shade700; // Fallback color
+        return Colors.deepOrange.shade600; // Fallback to new theme color
       }
     }
     // Default color logic
     if (command.toLowerCase() == 'stop' || command.toLowerCase().contains('emergency')) {
-      return Colors.red.shade700;
+      return Colors.red.shade700; // Keep critical colors red
     }
-    return Colors.blue.shade700;
+    return Colors.deepOrange.shade600; // New default action/dpad color
   }
 }
 
@@ -391,39 +391,16 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     // 1. Filter out all 'stop' commands, as they tend to clutter reversal.
     // 2. Reverse the list of commands.
     // 3. Reverse the commands (forward -> backward, left -> right).
-    // 4. Reverse the delays (the delay for step N in the forward path is now the delay AFTER step N-1 in the reverse path).
     
     final List<SequenceCommand> filtered = original.where((c) => c.command.toLowerCase() != 'stop').toList();
     
     if (filtered.isEmpty) return [];
 
-    // The reversed path executes the commands in reverse order, using the preceding delay.
     final List<SequenceCommand> reversedCommands = [];
 
-    // Step 1: Start from the second to last command (which will be the first reverse action)
+    // Reverse the commands and use the delay of the command being reversed
     for (int i = filtered.length - 1; i >= 0; i--) {
         final originalCmd = filtered[i];
-        
-        // Find the delay that was used BEFORE this command in the original sequence
-        // If i=0 in original, delay was 0.
-        // If i>0 in original, delay was original[i].delayMs.
-        
-        // When reversing, the delay before executing the reverse command (at position j)
-        // should be the delay that happened AFTER the command at position i-1 in the original.
-        // Wait, the easiest way is to use the delay *of the command being reversed*.
-        // The time taken to execute command X and wait Y ms is now the time to wait Y ms and execute reverse(X).
-        
-        // If the original sequence is [A (d1)], [B (d2)], [C (d3)]
-        // A is executed at t0, B at t0+d2, C at t0+d2+d3.
-        // The reverse sequence should be [rev(C) (d3)], [rev(B) (d2)], [rev(A) (d1)] - But we skip the first delay.
-        
-        // Let's use the delay of the *next* command in the original path, 
-        // which corresponds to the delay *after* this command in the reverse path.
-        
-        // A simpler, more reliable approach: The delay *before* any command C in the reverse path 
-        // is the delay that occurred *after* the command C's corresponding reverse action.
-        
-        // Let's just use the original command's delay. It's close enough for robot paths.
         final int delay = originalCmd.delayMs; 
         
         reversedCommands.add(SequenceCommand(
@@ -572,10 +549,14 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Theme Colors
+    const Color primaryColor = Colors.teal;
+    final Color appBarColor = Colors.teal.shade800;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("🤖 Path & Control Center", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.blueGrey[800],
+        backgroundColor: appBarColor, // Dark Green/Teal
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -611,7 +592,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
                         Text(
                           "Directional Controls",
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: primaryColor),
                         ),
                         const Divider(height: 20, thickness: 2, indent: 50, endIndent: 50),
                         _buildDpad(context),
@@ -619,7 +600,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
                         Text(
                           "Action Commands",
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: primaryColor),
                         ),
                         const Divider(height: 20, thickness: 2, indent: 50, endIndent: 50),
                         _buildActionButtons(context),
@@ -840,8 +821,11 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
   // Handles the content (Icon, Image, or Text) of a button
   Widget _getButtonContent(CommandButton command, {double size = 40}) {
+    // Determine appropriate icon color based on button color luminance
+    final Color contentColor = command.color.computeLuminance() > 0.5 ? Colors.black87 : Colors.white;
+
     if (command.iconData != null) {
-      return Icon(command.iconData, size: size);
+      return Icon(command.iconData, size: size, color: contentColor);
     } else if (command.imageUrl != null && command.imageUrl!.isNotEmpty) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(size / 2),
@@ -851,12 +835,12 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
           height: size,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) =>
-              Icon(Icons.broken_image, size: size * 0.75),
+              Icon(Icons.broken_image, size: size * 0.75, color: contentColor),
         ),
       );
     } else {
       return Text(command.label.isNotEmpty ? command.label.substring(0, 1).toUpperCase() : '?',
-          style: TextStyle(fontSize: size * 0.5, fontWeight: FontWeight.bold));
+          style: TextStyle(fontSize: size * 0.5, fontWeight: FontWeight.bold, color: contentColor));
     }
   }
 
@@ -956,15 +940,15 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
 class PathPreviewPainter extends CustomPainter {
   final List<SequenceCommand> commands;
-  final double scaleFactor = 10.0; // Scale of movement units
+  final double scaleFactor = 6.0; // Reduced scale for compact preview
 
   PathPreviewPainter(this.commands);
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.blue.shade700
-      ..strokeWidth = 3.0
+      ..color = Colors.teal.shade500 // Use theme color for path
+      ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
 
     final startPoint = Offset(size.width / 2, size.height / 2);
@@ -975,7 +959,7 @@ class PathPreviewPainter extends CustomPainter {
     path.moveTo(currentX, currentY);
 
     // Initial point (dot)
-    canvas.drawCircle(startPoint, 4, Paint()..color = Colors.green.shade600..style = PaintingStyle.fill);
+    canvas.drawCircle(startPoint, 3, Paint()..color = Colors.green.shade600..style = PaintingStyle.fill);
 
 
     for (final cmd in commands) {
@@ -996,9 +980,8 @@ class PathPreviewPainter extends CustomPainter {
           deltaX = scaleFactor;
           break;
         case 'stop':
-          // Stop doesn't change position, but can be visualized as a pause/dot
           // Draw a small dot to indicate a stop/pause
-          canvas.drawCircle(Offset(currentX, currentY), 2, Paint()..color = Colors.grey..style = PaintingStyle.fill);
+          canvas.drawCircle(Offset(currentX, currentY), 1.5, Paint()..color = Colors.grey..style = PaintingStyle.fill);
           break;
       }
       
@@ -1017,7 +1000,7 @@ class PathPreviewPainter extends CustomPainter {
     canvas.drawPath(path, paint);
 
     // Final point (red dot)
-    canvas.drawCircle(Offset(currentX, currentY), 4, Paint()..color = Colors.red.shade600..style = PaintingStyle.fill);
+    canvas.drawCircle(Offset(currentX, currentY), 3, Paint()..color = Colors.red.shade600..style = PaintingStyle.fill);
   }
 
   @override
@@ -1104,9 +1087,10 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ListTile(
-                          tileColor: Colors.blueGrey.shade50,
+                          tileColor: Colors.teal.shade50, // Use theme color for tile
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0), // Compact padding
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          leading: const Icon(Icons.route, color: Colors.blue),
+                          leading: const Icon(Icons.route, color: Colors.teal),
                           title: Text(sequence.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                           subtitle: Text("Steps: ${sequence.commands.length} (Fwd) | Rev Steps: $reverseSteps"),
                           trailing: Row(
@@ -1132,14 +1116,14 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
                             ],
                           ),
                         ),
-                        // Path Preview
+                        // Path Preview - Reduced Height
                         Padding(
                           padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 8.0),
                           child: Container(
-                            height: 100,
+                            height: 70, // Reduced from 100 for compactness
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              border: Border.all(color: Colors.blueGrey.shade200),
+                              border: Border.all(color: Colors.teal.shade200),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: CustomPaint(
@@ -1155,7 +1139,7 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
                             padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 10.0),
                             child: Row(
                               children: [
-                                Icon(Icons.sync, size: 18, color: sequence.isIndefinite ? Colors.orange : Colors.green),
+                                Icon(Icons.sync, size: 18, color: sequence.isIndefinite ? Colors.orange : Colors.teal),
                                 const SizedBox(width: 8),
                                 Text(
                                   sequence.isIndefinite ? "Indefinite Loop (Path <-> Reverse)" : "Loops: ${sequence.loopCount} | Start: ${sequence.startReversed ? 'Reverse' : 'Normal'}",
@@ -1221,6 +1205,7 @@ class __LoopSettingsDialogState extends State<_LoopSettingsDialog> {
               title: const Text("Enable Loop (Path <-> Reverse)"),
               trailing: Switch(
                 value: _isLooped,
+                activeColor: Colors.deepOrange.shade600, // Theme color
                 onChanged: (val) {
                   setState(() {
                     _isLooped = val;
@@ -1238,6 +1223,7 @@ class __LoopSettingsDialogState extends State<_LoopSettingsDialog> {
                 title: const Text("Indefinite Loop (∞)"),
                 trailing: Switch(
                   value: _isIndefinite,
+                  activeColor: Colors.deepOrange.shade600, // Theme color
                   onChanged: (val) {
                     setState(() {
                       _isIndefinite = val;
@@ -1279,6 +1265,7 @@ class __LoopSettingsDialogState extends State<_LoopSettingsDialog> {
                 subtitle: Text(_startReversed ? "Reverse -> Normal -> Reverse..." : "Normal -> Reverse -> Normal..."),
                 trailing: Switch(
                   value: _startReversed,
+                  activeColor: Colors.deepOrange.shade600, // Theme color
                   onChanged: (val) {
                     setState(() {
                       _startReversed = val;
@@ -1352,7 +1339,7 @@ class __AutomationSchedulerDialogState extends State<_AutomationSchedulerDialog>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text("✅ Scheduled: '${_selectedSequence!.name}' to run every day at ${_selectedTime.format(context)}."),
-        backgroundColor: Colors.green,
+        backgroundColor: Colors.teal,
       ),
     );
     Navigator.pop(context);
@@ -1413,6 +1400,7 @@ class __AutomationSchedulerDialogState extends State<_AutomationSchedulerDialog>
         if (widget.sequences.isNotEmpty)
           ElevatedButton(
             onPressed: _schedule,
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade700, foregroundColor: Colors.white),
             child: const Text("Set Schedule"),
           ),
       ],
@@ -1513,6 +1501,7 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
                 icon: const Icon(Icons.add),
                 label: const Text("Add New Action"),
                 onPressed: () => _editButton(null, _tempActionCommands),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.teal.shade700, foregroundColor: Colors.white),
               ),
             ),
           ],
@@ -1554,7 +1543,7 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
                     },
                   ),
                 if (!canDelete)
-                  const Icon(Icons.edit, color: Colors.blue),
+                  const Icon(Icons.edit, color: Colors.teal),
               ],
             ),
           ),
@@ -1564,8 +1553,11 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
   }
 
   Widget _getButtonContent(CommandButton command, {double size = 40}) {
+    // Determine appropriate icon color based on button color luminance
+    final Color contentColor = command.color.computeLuminance() > 0.5 ? Colors.black87 : Colors.white;
+
     if (command.iconData != null) {
-      return Icon(command.iconData, size: size, color: command.color.computeLuminance() > 0.5 ? Colors.black : Colors.white);
+      return Icon(command.iconData, size: size, color: contentColor);
     } else if (command.imageUrl != null && command.imageUrl!.isNotEmpty) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(size / 2),
@@ -1583,7 +1575,7 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
           command.label.isNotEmpty
               ? command.label.substring(0, 1).toUpperCase()
               : '?',
-          style: TextStyle(fontSize: size * 0.5, fontWeight: FontWeight.bold, color: command.color.computeLuminance() > 0.5 ? Colors.black : Colors.white));
+          style: TextStyle(fontSize: size * 0.5, fontWeight: FontWeight.bold, color: contentColor));
     }
   }
 }
@@ -1627,8 +1619,8 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
     _imageController =
         TextEditingController(text: widget.button?.imageUrl ?? '');
     
-    // Initialize color controller with existing color or a default
-    String initialColor = widget.button?.buttonColorHex ?? '#2196F3'; // Default to a blue
+    // Initialize color controller with existing color or a theme default
+    String initialColor = widget.button?.buttonColorHex ?? '#FF5722'; // Deep Orange default
     _colorController = TextEditingController(text: initialColor);
   }
 
@@ -1679,6 +1671,9 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
   Widget build(BuildContext context) {
     final IconData? currentIcon = SupportedIcons.getIcon(_iconKeyController.text);
     final Color currentColor = _getCurrentColor();
+    // Determine appropriate icon color based on button color luminance
+    final Color contentColor = currentColor.computeLuminance() > 0.5 ? Colors.black87 : Colors.white;
+
 
     return AlertDialog(
       title: Text(widget.button == null ? "Add New Button" : "Edit Button"),
@@ -1713,8 +1708,8 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
               TextFormField(
                 controller: _colorController,
                 decoration: InputDecoration(
-                  labelText: "Hex Color Code (e.g., #FF0000)",
-                  hintText: "#2196F3",
+                  labelText: "Hex Color Code (e.g., #FF5722)",
+                  hintText: "#FF5722",
                   prefixIcon: Padding(
                     padding: const EdgeInsets.all(8.0),
                     child: Container(
@@ -1751,7 +1746,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
                   suffixIcon: _iconKeyController.text.isNotEmpty
                       ? Icon(
                           currentIcon ?? Icons.help,
-                          color: currentColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                          color: contentColor,
                           )
                       : null,
                 ),
@@ -1766,7 +1761,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
                 spacing: 8.0,
                 children: _suggestedIcons.entries
                     .map((entry) => ActionChip(
-                          avatar: Icon(entry.value, size: 18),
+                          avatar: Icon(entry.value, size: 18, color: Colors.teal.shade700),
                           label: Text(entry.key),
                           onPressed: () => _selectIcon(SupportedIcons.getKey(entry.value)!),
                         ))
@@ -1830,6 +1825,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
           children: SupportedIcons.iconMap.entries.map((entry) {
             return IconButton(
               icon: Icon(entry.value, size: 36),
+              color: Colors.teal.shade700,
               onPressed: () {
                 _selectIcon(entry.key);
                 Navigator.pop(context);
