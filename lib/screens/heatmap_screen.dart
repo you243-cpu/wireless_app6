@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import '../services/heatmap_service.dart';
+import '../services/heatmap_service.dart'; // Contains HeatmapGrid
 import '../services/heatmap_cache_service.dart';
 import '../services/csv_service.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -42,6 +42,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   List<List<double>>? gridData;
   double minValue = 0.0;
   double maxValue = 0.0;
+  double geographicWidthRatio = 1.0; // NEW: Aspect ratio for shape correction
   String? gltfModelPath;
 
   @override
@@ -150,12 +151,14 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         gridData = [];
         minValue = 0;
         maxValue = 0;
+        geographicWidthRatio = 1.0; // Reset ratio
       });
       return;
     }
 
     // Prefer lat/lon seamless grid if available
-    final newGrid = heatmapService.createUniformGridFromLatLon(
+    // CHANGE: Function now returns HeatmapGrid
+    final HeatmapGrid heatmapData = heatmapService.createUniformGridFromLatLon(
       metric: currentMetric,
       start: startTime!,
       end: endTime!,
@@ -164,7 +167,9 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       targetRows: null,
     );
 
+    final newGrid = heatmapData.grid; // Extract grid data
     final allValues = newGrid.expand((row) => row).where((v) => !v.isNaN).toList();
+    
     if (allValues.isNotEmpty) {
       final min = allValues.reduce((a, b) => a < b ? a : b);
       final max = allValues.reduce((a, b) => a > b ? a : b);
@@ -180,6 +185,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         gridData = newGrid;
         minValue = adjustedMin;
         maxValue = adjustedMax;
+        geographicWidthRatio = heatmapData.widthRatio; // NEW: Set aspect ratio
       });
     } else {
       // When no finite values are present, still provide a non-zero range for UI
@@ -187,6 +193,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         gridData = newGrid;
         minValue = 0;
         maxValue = 1;
+        geographicWidthRatio = heatmapData.widthRatio; // NEW: Still set ratio even if empty
       });
     }
   }
@@ -398,6 +405,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                             ? _buildTexturedPlaneViewer()
                             : Heatmap2D(
                                 grid: gridData!,
+                                geographicWidthRatio: geographicWidthRatio, // PASS THE NEW RATIO HERE
                                 metricLabel: currentMetric,
                                 minValue: minValue,
                                 maxValue: maxValue,
