@@ -1,11 +1,12 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/heatmap_service.dart';
+import '../services/heatmap_service.dart'; // Ensure this import path is correct
 import 'heatmap_legend.dart';
 
 class Heatmap2D extends StatelessWidget {
   final List<List<double>> grid;
+  final double geographicWidthRatio; // NEW: Ratio (Delta Lon / Delta Lat) for aspect correction
   final bool showGridLines;
   final String metricLabel;
   final double minValue;
@@ -14,6 +15,8 @@ class Heatmap2D extends StatelessWidget {
   const Heatmap2D({
     super.key,
     required this.grid,
+    // Provide a default of 1.0 (square) for non-geographic or fallback grids
+    this.geographicWidthRatio = 1.0, 
     this.showGridLines = false,
     required this.metricLabel,
     required this.minValue,
@@ -35,17 +38,24 @@ class Heatmap2D extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SizedBox(
-                  width: constraints.maxWidth,
-                  height: constraints.maxHeight,
-                  child: CustomPaint(
-                    painter: _HeatmapPainter(
-                        grid, showGridLines, isDark, metricLabel, minValue, maxValue),
-                  ),
-                );
-              },
+            child: Center( // Center the constrained heatmap within the available space
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // NEW: Use AspectRatio to ensure the heatmap's visual shape
+                  // matches the geographic bounding box (Delta Lon / Delta Lat).
+                  return AspectRatio(
+                    aspectRatio: geographicWidthRatio,
+                    child: SizedBox(
+                      width: constraints.maxWidth,
+                      height: constraints.maxHeight,
+                      child: CustomPaint(
+                        painter: _HeatmapPainter(
+                            grid, showGridLines, isDark, metricLabel, minValue, maxValue),
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
           const SizedBox(width: 16),
@@ -88,6 +98,7 @@ class _HeatmapPainter extends CustomPainter {
 
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
+        // valueToColor comes from the heatmap_service.dart import
         paint.color = valueToColor(grid[r][c], minValue, maxValue, metricLabel);
         final double x0 = c * cellWidth;
         final double y0 = r * cellHeight;
