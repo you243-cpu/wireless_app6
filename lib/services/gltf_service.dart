@@ -24,9 +24,10 @@ class GltfService {
       0.0, 1.0,
       1.0, 1.0,
     ]);
+    // Use CCW winding so the top (normal +Y) is front-facing
     final Uint16List indices = Uint16List.fromList(<int>[
-      0, 1, 2,
-      2, 1, 3,
+      0, 2, 1,
+      1, 2, 3,
     ]);
 
     // Concatenate into one buffer
@@ -51,6 +52,7 @@ class GltfService {
 
     final Map<String, dynamic> gltf = {
       "asset": {"version": "2.0", "generator": "FertiLitef-textured-plane"},
+      "extensionsUsed": ["KHR_materials_unlit"],
       "buffers": [
         {
           "byteLength": totalBufferLength,
@@ -80,9 +82,12 @@ class GltfService {
       ],
       "materials": [
         {
+          "doubleSided": true,
+          "alphaMode": "OPAQUE",
+          "extensions": {"KHR_materials_unlit": {}},
           "pbrMetallicRoughness": {
             "baseColorTexture": {"index": 0},
-            "roughnessFactor": 1.0,
+            "roughnessFactor": 0.9,
             "metallicFactor": 0.0
           }
         }
