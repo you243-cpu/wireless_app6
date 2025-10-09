@@ -38,8 +38,10 @@ class Heatmap2D extends StatelessWidget {
               style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)));
     }
     
-    // 🐛 DEBUG Check: Use a safe ratio to prevent AspectRatio errors
-    final double safeRatio = geographicWidthRatio.isFinite && geographicWidthRatio > 0 ? geographicWidthRatio : 1.0;
+    // Compute aspect ratio from grid dimensions so each cell renders square
+    final int rows = grid.length;
+    final int cols = grid[0].length;
+    final double aspectFromGrid = cols > 0 && rows > 0 ? cols / rows : 1.0;
 
 
     return Padding(
@@ -51,7 +53,8 @@ class Heatmap2D extends StatelessWidget {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   return AspectRatio(
-                    aspectRatio: safeRatio,
+                    // Use grid-based aspect so cells are square on screen
+                    aspectRatio: aspectFromGrid,
                     child: SizedBox(
                       width: constraints.maxWidth,
                       height: constraints.maxHeight,
@@ -103,7 +106,7 @@ class _HeatmapPainter extends CustomPainter {
     
     final rows = grid.length;
     final cols = grid[0].length;
-    final paint = Paint();
+    final paint = Paint()..isAntiAlias = false; // Avoid hairline seams between cells
 
     final cellWidth = size.width / cols;
     final cellHeight = size.height / rows;
