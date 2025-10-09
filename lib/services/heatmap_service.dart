@@ -271,8 +271,15 @@ class HeatmapService {
     // Determine resolution
     final uniqueLats = candidates.map((p) => p.lat!).toSet().toList()..sort();
     final uniqueLons = candidates.map((p) => p.lon!).toSet().toList()..sort();
-    final int cols = targetCols ?? max(16, min(128, uniqueLons.length * 4));
-    final int rows = targetRows ?? max(16, min(128, uniqueLats.length * 4));
+    
+    // MODIFICATION START: Enforce a higher minimum resolution for better visual detail
+    final int minResolution = 32; 
+    final int maxResolution = 128; // Keep the cap
+
+    final int cols = targetCols ?? max(minResolution, min(maxResolution, uniqueLons.length * 4));
+    final int rows = targetRows ?? max(minResolution, min(maxResolution, uniqueLats.length * 4));
+    // MODIFICATION END
+
     if (cols <= 0 || rows <= 0) {
       return [ [ double.nan ] ];
     }
