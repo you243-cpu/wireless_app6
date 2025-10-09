@@ -55,7 +55,7 @@ class HeatmapService {
     final latIndex = lowerHeader.indexOf('lat');
     final lonIndex = lowerHeader.indexOf('lon');
 
-    final bool useXY = xIndex != -1 && yIndex != -1 && (tIndex != -1 || timestampIndex != -1);
+    final bool useXY = xIndex != -1 && yIndex != -1 && (tIndex != -1 ? tIndex : timestampIndex) != -1;
     final bool useLatLon = latIndex != -1 && lonIndex != -1 && timestampIndex != -1;
 
     if (!useXY && !useLatLon) {
@@ -272,14 +272,13 @@ class HeatmapService {
     final uniqueLats = candidates.map((p) => p.lat!).toSet().toList()..sort();
     final uniqueLons = candidates.map((p) => p.lon!).toSet().toList()..sort();
     
-    // MODIFICATION START: Enforce a higher minimum resolution for better visual detail
+    // Enforce a higher minimum resolution for better visual detail
     final int minResolution = 32; 
-    final int maxResolution = 128; // Keep the cap
+    final int maxResolution = 128; 
 
     final int cols = targetCols ?? max(minResolution, min(maxResolution, uniqueLons.length * 4));
     final int rows = targetRows ?? max(minResolution, min(maxResolution, uniqueLats.length * 4));
-    // MODIFICATION END
-
+    
     if (cols <= 0 || rows <= 0) {
       return [ [ double.nan ] ];
     }
@@ -376,9 +375,10 @@ Color valueToColor(double value, double minValue, double maxValue, String metric
   }
 
   final double range = maxValue - minValue;
-  // Guard against zero/invalid range to avoid divide-by-zero and NaNs
+  
+  // Guard against zero/invalid range. If the range is zero (all values are identical), 
+  // we return a neutral color (e.g., green, as it's the "optimal" middle).
   if (!range.isFinite || range.abs() < 1e-12) {
-    // Default neutral color when range is invalid
     return Colors.green;
   }
 
@@ -387,10 +387,11 @@ Color valueToColor(double value, double minValue, double maxValue, String metric
   final optimalMax = optimalRange[1];
 
   // Map value to a 0-1 range based on the overall min/max of the data
+  // This is the CRITICAL STEP: The entire data range [minValue, maxValue] is mapped to [0, 1].
   final clampedValue = value.clamp(minValue, maxValue);
-  final normalizedValue = (clampedValue - minValue) / range;
+  final normalizedValue = (clampedValue - minValue) / range; // 0 to 1
 
-  // Define stops for the gradient
+  // Map optimal stops to the new normalized 0-1 range.
   final optimalMinStop = (optimalMin - minValue) / range;
   final optimalMaxStop = (optimalMax - minValue) / range;
 
