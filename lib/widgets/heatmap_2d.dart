@@ -6,7 +6,7 @@ import 'heatmap_legend.dart';
 
 class Heatmap2D extends StatelessWidget {
   final List<List<double>> grid;
-  final double geographicWidthRatio; // NEW: Ratio (Delta Lon / Delta Lat) for aspect correction
+  final double geographicWidthRatio; // Ratio (Delta Lon / Delta Lat) for aspect correction
   final bool showGridLines;
   final String metricLabel;
   final double minValue;
@@ -16,7 +16,7 @@ class Heatmap2D extends StatelessWidget {
     super.key,
     required this.grid,
     // Provide a default of 1.0 (square) for non-geographic or fallback grids
-    this.geographicWidthRatio = 1.0, 
+    this.geographicWidthRatio = 1.0,
     this.showGridLines = false,
     required this.metricLabel,
     required this.minValue,
@@ -27,11 +27,20 @@ class Heatmap2D extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // 🐛 DEBUG Check: Ensure min/max are valid before rendering
+    if (!minValue.isFinite || !maxValue.isFinite || maxValue < minValue) {
+      return Center(child: Text("Invalid data range for rendering. Min: $minValue, Max: $maxValue"));
+    }
+    
     if (grid.isEmpty || grid[0].isEmpty) {
       return Center(
           child: Text("No data",
               style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)));
     }
+    
+    // 🐛 DEBUG Check: Use a safe ratio to prevent AspectRatio errors
+    final double safeRatio = geographicWidthRatio.isFinite && geographicWidthRatio > 0 ? geographicWidthRatio : 1.0;
+
 
     return Padding(
       padding: const EdgeInsets.all(8.0),
@@ -41,10 +50,8 @@ class Heatmap2D extends StatelessWidget {
             child: Center( // Center the constrained heatmap within the available space
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  // NEW: Use AspectRatio to ensure the heatmap's visual shape
-                  // matches the geographic bounding box (Delta Lon / Delta Lat).
                   return AspectRatio(
-                    aspectRatio: geographicWidthRatio,
+                    aspectRatio: safeRatio,
                     child: SizedBox(
                       width: constraints.maxWidth,
                       height: constraints.maxHeight,
@@ -89,6 +96,11 @@ class _HeatmapPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // 🐛 Critical check: Stop painting if the range is invalid
+    if (!minValue.isFinite || !maxValue.isFinite || maxValue < minValue) {
+      return; 
+    }
+    
     final rows = grid.length;
     final cols = grid[0].length;
     final paint = Paint();
@@ -98,13 +110,20 @@ class _HeatmapPainter extends CustomPainter {
 
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
-        // valueToColor comes from the heatmap_service.dart import
-        paint.color = valueToColor(grid[r][c], minValue, maxValue, metricLabel);
+        final cellValue = grid[r][c];
+        
+        // Ensure you have access to the valueToColor function from heatmap_service.dart
+        paint.color = valueToColor(cellValue, minValue, maxValue, metricLabel);
+        
         final double x0 = c * cellWidth;
         final double y0 = r * cellHeight;
-        final double x1 = (c == cols - 1) ? size.width : (c + 1) * cellWidth;
-        final double y1 = (r == rows - 1) ? size.height : (r + 1) * cellHeight;
-        final rect = Rect.fromLTWH(x0, y0, x1 - x0, y1 - y0);
+        
+        // Simplified and safer boundary calculation using fromLTRB
+        final double x1 = (c + 1) * cellWidth; 
+        final double y1 = (r + 1) * cellHeight;
+        
+        final rect = Rect.fromLTRB(x0, y0, x1, y1); 
+        
         canvas.drawRect(rect, paint);
 
         if (showGridLines) {
