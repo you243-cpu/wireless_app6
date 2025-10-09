@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'dart:convert';
 import 'package:csv/csv.dart';
-import 'dart:math';
-import 'package:intl/intl.dart';
+import 'dart:math'; // Used for max, min, sqrt, and pow for IDW
+import 'package:intl/intl';
 
 // New container class to return the grid data and its geographic aspect ratio.
 class HeatmapGrid {
@@ -253,7 +253,7 @@ class HeatmapService {
     return grid;
   }
 
-  // Build a uniform, seamless grid using lat/lon by nearest-neighbor binning
+  // Build a uniform, seamless grid using lat/lon by Inverse Distance Weighting (IDW) interpolation
   HeatmapGrid createUniformGridFromLatLon({
     required String metric,
     required DateTime start,
@@ -318,24 +318,40 @@ class HeatmapService {
     List<double> latAxis = List.generate(rows, (r) => rows == 1 ? minLat : minLat + (maxLat - minLat) * r / (rows - 1));
     List<double> lonAxis = List.generate(cols, (c) => cols == 1 ? minLon : minLon + (maxLon - minLon) * c / (cols - 1));
 
-    // Fill grid using nearest neighbor
+    // Fill grid using Inverse Distance Weighting (IDW) interpolation
     final grid = List.generate(rows, (_) => List.filled(cols, double.nan));
+    
+    const double p = 2.0; // Power parameter (Inverse Square Distance)
+    const double epsilon = 1e-12; // Small value to prevent division by zero
+
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
         final lat = latAxis[r];
         final lon = lonAxis[c];
-        double bestDist = double.infinity;
-        double bestVal = double.nan;
+        
+        double weightedSum = 0.0;
+        double weightSum = 0.0;
+        
         for (final s in samples) {
+          // Calculate Euclidean distance squared (approximation)
           final double dLat = s.lat - lat;
           final double dLon = s.lon - lon;
           final double dist2 = dLat * dLat + dLon * dLon;
-          if (dist2 < bestDist) {
-            bestDist = dist2;
-            bestVal = s.value;
-          }
+          
+          final double dist = sqrt(dist2);
+          
+          // Weight calculation: 1 / (distance^p + epsilon)
+          final double weight = 1.0 / (pow(dist, p) + epsilon); 
+
+          weightedSum += s.value * weight;
+          weightSum += weight;
         }
-        grid[r][c] = bestVal;
+
+        if (weightSum > 0) {
+          grid[r][c] = weightedSum / weightSum;
+        } else {
+          grid[r][c] = double.nan;
+        }
       }
     }
     
