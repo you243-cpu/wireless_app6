@@ -3,7 +3,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'dart:convert';
 import 'package:csv/csv.dart';
 import 'dart:math'; // Used for max, min, sqrt, and pow for IDW
-import 'package:intl/intl';
+import 'package:intl/intl.dart';
 
 // New container class to return the grid data and its geographic aspect ratio.
 class HeatmapGrid {
