@@ -57,36 +57,44 @@ class HeatmapLegend extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Expanded(
-            child: Container(
-              width: thickness,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: gradientColors.reversed.toList(),
-                  stops: stops.reversed.toList(),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: thickness,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      // Increase from bottom (min/blue) to top (max/red)
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: gradientColors,
+                      stops: stops,
+                    ),
+                    border: Border.all(
+                      color: isDark ? Colors.white54 : Colors.black54,
+                      width: 0.5,
+                    ),
+                  ),
                 ),
-                border: Border.all(
-                  color: isDark ? Colors.white54 : Colors.black54,
-                  width: 0.5,
+                const SizedBox(width: 6),
+                // Labels aligned to the bar: top = max, bottom = min
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      maxValue.toStringAsFixed(2),
+                      style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 12),
+                    ),
+                    Text(
+                      minValue.toStringAsFixed(2),
+                      style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 12),
+                    ),
+                  ],
                 ),
-              ),
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                minValue.toStringAsFixed(2),
-                style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 12),
-              ),
-              Text(
-                maxValue.toStringAsFixed(2),
-                style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 12),
-              ),
-            ],
-          )
         ],
       );
     } else {
