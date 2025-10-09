@@ -1080,6 +1080,14 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
                 itemBuilder: (context, index) {
                   final sequence = _displaySequences[index];
                   final reverseSteps = widget.getReversedSequence(sequence.commands).length;
+                  
+                  String subtitleText = "Reversible Path (${reverseSteps} steps)";
+                  if (sequence.isLooped) {
+                    subtitleText = sequence.isIndefinite 
+                        ? "Indefinite Loop Active (Path <-> Reverse)" 
+                        : "Loops: ${sequence.loopCount} | Start: ${sequence.startReversed ? 'Reverse' : 'Normal'}";
+                  }
+
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 6.0),
                     elevation: 2,
@@ -1092,12 +1100,12 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           leading: const Icon(Icons.route, color: Colors.teal),
                           title: Text(sequence.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text("Steps: ${sequence.commands.length} (Fwd) | Rev Steps: $reverseSteps"),
+                          subtitle: Text(subtitleText),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.loop, color: Colors.purple),
+                                icon: Icon(Icons.loop, color: sequence.isLooped ? Colors.purple.shade700 : Colors.grey),
                                 tooltip: 'Configure Looping',
                                 onPressed: () => _openLoopSettings(sequence),
                               ),
@@ -1116,38 +1124,54 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
                             ],
                           ),
                         ),
-                        // Path Preview - Reduced Height
+                        
+                        // --- START: Path Preview with text on top ---
                         Padding(
                           padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 8.0),
-                          child: Container(
-                            height: 70, // Reduced from 100 for compactness
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              border: Border.all(color: Colors.teal.shade200),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: CustomPaint(
-                              painter: PathPreviewPainter(sequence.commands),
-                              child: const SizedBox.expand(),
-                            ),
+                          child: Stack(
+                            clipBehavior: Clip.none, // Allows the badge to sit outside bounds
+                            children: [
+                              // The main box (Path Preview)
+                              Container(
+                                height: 70, // Reduced from 100 for compactness
+                                // Add margin to offset the absolutely positioned chip below
+                                margin: const EdgeInsets.only(top: 10), 
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  border: Border.all(color: Colors.teal.shade200),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: CustomPaint(
+                                  painter: PathPreviewPainter(sequence.commands),
+                                  child: const SizedBox.expand(),
+                                ),
+                              ),
+                              
+                              // The "Path Text" placed on top of the box
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.deepOrange.shade600, // Theme color
+                                    borderRadius: BorderRadius.circular(6),
+                                    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 3)],
+                                  ),
+                                  child: Text(
+                                    "STEPS: ${sequence.commands.length}",
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        
-                        // Looping Status
-                        if (sequence.isLooped)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 10.0),
-                            child: Row(
-                              children: [
-                                Icon(Icons.sync, size: 18, color: sequence.isIndefinite ? Colors.orange : Colors.teal),
-                                const SizedBox(width: 8),
-                                Text(
-                                  sequence.isIndefinite ? "Indefinite Loop (Path <-> Reverse)" : "Loops: ${sequence.loopCount} | Start: ${sequence.startReversed ? 'Reverse' : 'Normal'}",
-                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                          ),
+                        // --- END: Path Preview with text on top ---
                       ],
                     ),
                   );
@@ -1601,6 +1625,20 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
   late TextEditingController _imageController;
   late TextEditingController _colorController; // New controller for hex color
 
+  // Color palette for easy selection
+  static const List<String> _colorPalette = [
+    '#00BCD4', // Cyan (Teal theme color)
+    '#FF5722', // Deep Orange (Current theme highlight)
+    '#4CAF50', // Green
+    '#2196F3', // Blue
+    '#9C27B0', // Purple
+    '#FFC107', // Amber
+    '#F44336', // Red
+    '#795548', // Brown
+    '#607D8B', // Blue Grey
+  ];
+
+
   final Map<String, IconData> _suggestedIcons = {
     'lightbulb': SupportedIcons.iconMap['lightbulb']!,
     'assistant_photo': SupportedIcons.iconMap['code']!,
@@ -1656,6 +1694,13 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
     });
   }
   
+  // New method to handle color selection from the palette
+  void _selectColor(String hex) {
+    setState(() {
+      _colorController.text = hex;
+    });
+  }
+
   // Helper to safely get the current color from the hex controller
   Color _getCurrentColor() {
     String hex = _colorController.text.replaceAll('#', '');
@@ -1733,6 +1778,55 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
                   }
                   return null;
                 },
+              ),
+              
+              const SizedBox(height: 15),
+              
+              // --- Color Palette Selector ---
+              const Text('Select from Palette:', style: TextStyle(fontSize: 14, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 10.0,
+                runSpacing: 10.0,
+                alignment: WrapAlignment.center,
+                children: _colorPalette.map((hex) {
+                  Color color;
+                  try {
+                    String cleanHex = hex.replaceAll('#', '');
+                    if (cleanHex.length == 6) cleanHex = 'FF$cleanHex';
+                    color = Color(int.parse(cleanHex, radix: 16));
+                  } catch (_) {
+                    color = Colors.black;
+                  }
+                  
+                  // Check if this color is currently selected (for border highlight)
+                  final bool isSelected = _colorController.text.toUpperCase() == hex.toUpperCase();
+
+                  return GestureDetector(
+                    onTap: () => _selectColor(hex),
+                    child: Tooltip(
+                      message: hex,
+                      child: Container(
+                        width: 36, // Slightly larger touch target
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSelected ? Colors.black : Colors.transparent,
+                            width: isSelected ? 3 : 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 3,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 15),
 
