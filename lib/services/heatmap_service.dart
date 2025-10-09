@@ -5,6 +5,14 @@ import 'package:csv/csv.dart';
 import 'dart:math';
 import 'package:intl/intl.dart';
 
+// New container class to return the grid data and its geographic aspect ratio.
+class HeatmapGrid {
+  final List<List<double>> grid;
+  final double widthRatio; // Delta Lon / Delta Lat
+
+  HeatmapGrid({required this.grid, required this.widthRatio});
+}
+
 // A single data point
 class HeatmapPoint {
   final int x;
@@ -246,7 +254,7 @@ class HeatmapService {
   }
 
   // Build a uniform, seamless grid using lat/lon by nearest-neighbor binning
-  List<List<double>> createUniformGridFromLatLon({
+  HeatmapGrid createUniformGridFromLatLon({
     required String metric,
     required DateTime start,
     required DateTime end,
@@ -254,7 +262,7 @@ class HeatmapService {
     int? targetRows,
   }) {
     if (points.isEmpty) {
-      return [ [ double.nan ] ];
+      return HeatmapGrid(grid: [[double.nan]], widthRatio: 1.0);
     }
 
     final candidates = points.where((p) =>
@@ -264,15 +272,16 @@ class HeatmapService {
     ).toList();
 
     if (candidates.isEmpty) {
-      // Fallback to index-based grid
-      return createGrid(metric: metric, start: start, end: end);
+      // Fallback to index-based grid with a square ratio
+      final fallbackGrid = createGrid(metric: metric, start: start, end: end);
+      return HeatmapGrid(grid: fallbackGrid, widthRatio: 1.0);
     }
 
     // Determine resolution
     final uniqueLats = candidates.map((p) => p.lat!).toSet().toList()..sort();
     final uniqueLons = candidates.map((p) => p.lon!).toSet().toList()..sort();
     
-    // Enforce a higher minimum resolution for better visual detail
+    // Enforce a higher minimum resolution for better visual detail (32x32)
     final int minResolution = 32; 
     final int maxResolution = 128; 
 
@@ -280,13 +289,18 @@ class HeatmapService {
     final int rows = targetRows ?? max(minResolution, min(maxResolution, uniqueLats.length * 4));
     
     if (cols <= 0 || rows <= 0) {
-      return [ [ double.nan ] ];
+      return HeatmapGrid(grid: [[double.nan]], widthRatio: 1.0);
     }
 
     final double minLat = uniqueLats.first;
     final double maxLat = uniqueLats.last;
     final double minLon = uniqueLons.first;
     final double maxLon = uniqueLons.last;
+
+    // Calculate Aspect Ratio: Delta Lon / Delta Lat
+    final double deltaLat = maxLat - minLat;
+    final double deltaLon = maxLon - minLon;
+    final double ratio = (deltaLat.abs() < 1e-6 || !deltaLat.isFinite) ? 1.0 : deltaLon / deltaLat;
 
     // Precompute candidate values and positions
     final List<_Sample> samples = [];
@@ -297,7 +311,7 @@ class HeatmapService {
       }
     }
     if (samples.isEmpty) {
-      return [ [ double.nan ] ];
+      return HeatmapGrid(grid: [[double.nan]], widthRatio: 1.0);
     }
 
     // Axis arrays (inclusive endpoints)
@@ -324,7 +338,8 @@ class HeatmapService {
         grid[r][c] = bestVal;
       }
     }
-    return grid;
+    
+    return HeatmapGrid(grid: grid, widthRatio: ratio);
   }
 
   double _metricValue(HeatmapPoint p, String metric) {
@@ -387,7 +402,6 @@ Color valueToColor(double value, double minValue, double maxValue, String metric
   final optimalMax = optimalRange[1];
 
   // Map value to a 0-1 range based on the overall min/max of the data
-  // This is the CRITICAL STEP: The entire data range [minValue, maxValue] is mapped to [0, 1].
   final clampedValue = value.clamp(minValue, maxValue);
   final normalizedValue = (clampedValue - minValue) / range; // 0 to 1
 
