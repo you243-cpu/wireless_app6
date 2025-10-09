@@ -104,7 +104,7 @@ class _SurfacePainter extends CustomPainter {
     final int cols = grid[0].length;
     final double safeRange = (maxValue - minValue).abs() < 1e-12 ? 1.0 : (maxValue - minValue);
 
-    // World units and camera
+    // World units and camera (enforce square cell proportion by using grid aspect)
     final double unit = (math.min(size.width, size.height) * 0.9) / math.max(cols, rows);
     final double heightScale = unit * 0.7;
     final Offset center = Offset(size.width * 0.5, size.height * 0.55);
@@ -193,7 +193,9 @@ class _SurfacePainter extends CustomPainter {
 
     tris.sort((a, b) => a.depth.compareTo(b.depth));
 
-    final Paint paint = Paint()..style = PaintingStyle.fill;
+    final Paint paint = Paint()
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = false; // Avoid hairline seams on edges
     for (final tri in tris) {
       final baseColor = valueToColor(tri.value, minValue, maxValue, metricLabel);
       final shaded = _applyShade(baseColor, tri.shade);
