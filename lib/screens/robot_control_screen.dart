@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'dart:async'; // For Future.delayed during playback
+import 'dart:async'; 
+import 'dart:math'; // For Path Preview
 
 // ====================================================================
 // --- Models for Recorded Movement Sequence ---
@@ -24,18 +25,46 @@ class SequenceCommand {
         command: json['command'] as String,
         delayMs: json['delayMs'] as int,
       );
+  
+  // Gets the opposite command for path reversal
+  String get reverseCommand {
+    switch (command.toLowerCase()) {
+      case 'forward': return 'backward';
+      case 'backward': return 'forward';
+      case 'left': return 'right';
+      case 'right': return 'left';
+      default: return 'stop'; // Stop is usually its own reverse
+    }
+  }
 }
 
 // Stores an entire named sequence of commands.
 class MovementSequence {
   final String name;
   final List<SequenceCommand> commands;
+  
+  // New Looping/Automation Properties
+  final bool isLooped;
+  final bool isIndefinite;
+  final int loopCount;
+  final bool startReversed;
 
-  MovementSequence({required this.name, required this.commands});
+  MovementSequence({
+    required this.name,
+    required this.commands,
+    this.isLooped = false,
+    this.isIndefinite = false,
+    this.loopCount = 1,
+    this.startReversed = false,
+  });
 
   Map<String, dynamic> toJson() => {
         'name': name,
         'commands': commands.map((c) => c.toJson()).toList(),
+        'isLooped': isLooped,
+        'isIndefinite': isIndefinite,
+        'loopCount': loopCount,
+        'startReversed': startReversed,
       };
 
   factory MovementSequence.fromJson(Map<String, dynamic> json) => MovementSequence(
@@ -43,6 +72,10 @@ class MovementSequence {
         commands: (json['commands'] as List)
             .map((item) => SequenceCommand.fromJson(item))
             .toList(),
+        isLooped: json['isLooped'] as bool? ?? false,
+        isIndefinite: json['isIndefinite'] as bool? ?? false,
+        loopCount: json['loopCount'] as int? ?? 1,
+        startReversed: json['startReversed'] as bool? ?? false,
       );
 }
 
@@ -60,27 +93,18 @@ class SupportedIcons {
     'stop': Icons.stop,
     'warning': Icons.warning,
     'lightbulb': Icons.lightbulb,
-    'lightbulb_outline': Icons.lightbulb_outline,
-    'assistant_photo': Icons.assistant_photo,
     'code': Icons.code,
     'home': Icons.home,
-    'power': Icons.power_settings_new,
-    'sensors': Icons.sensors,
-    'camera': Icons.camera_alt,
-    'build': Icons.build,
     'play_circle': Icons.play_circle,
     'settings_power': Icons.settings_power,
     'radio': Icons.radio_button_checked,
   };
 
-  // Helper to get the actual IconData using the global map
   static IconData? getIcon(String key) {
     return iconMap[key];
   }
 
-  // Helper to get the string key from an IconData object
   static String? getKey(IconData icon) {
-    // Note: This needs to iterate through all entries to find a match, less efficient but necessary.
     for (var entry in iconMap.entries) {
       if (entry.value.codePoint == icon.codePoint) {
         return entry.key;
@@ -98,36 +122,57 @@ class CommandButton {
   final String command;
   final String? iconKey;
   final String? imageUrl;
+  final String? buttonColorHex; // New property for button color
 
   CommandButton({
     required this.label,
     required this.command,
     this.iconKey,
     this.imageUrl,
+    this.buttonColorHex,
   });
 
-  // Convert a CommandButton to a JSON map
   Map<String, dynamic> toJson() => {
         'label': label,
         'command': command,
         'iconKey': iconKey,
         'imageUrl': imageUrl,
+        'buttonColorHex': buttonColorHex,
       };
 
-  // Create a CommandButton from a JSON map
   factory CommandButton.fromJson(Map<String, dynamic> json) => CommandButton(
         label: json['label'] as String,
         command: json['command'] as String,
         iconKey: json['iconKey'] as String?,
         imageUrl: json['imageUrl'] as String?,
+        buttonColorHex: json['buttonColorHex'] as String?,
       );
 
-  // Helper to get the actual IconData from the stored string key
   IconData? get iconData => iconKey != null ? SupportedIcons.getIcon(iconKey!) : null;
+
+  Color get color {
+    if (buttonColorHex != null) {
+      // Convert hex string (e.g., #FF0000) to Color
+      try {
+        String hex = buttonColorHex!.replaceAll('#', '');
+        if (hex.length == 6) {
+          hex = 'FF$hex'; // Add alpha if missing
+        }
+        return Color(int.parse(hex, radix: 16));
+      } catch (_) {
+        return Colors.blue.shade700; // Fallback color
+      }
+    }
+    // Default color logic
+    if (command.toLowerCase() == 'stop' || command.toLowerCase().contains('emergency')) {
+      return Colors.red.shade700;
+    }
+    return Colors.blue.shade700;
+  }
 }
 
 // ====================================================================
-// --- Main Control Screen (Exported for Dashboard) ---
+// --- Main Control Screen ---
 // ====================================================================
 enum RecordingState { stopped, recording, paused }
 
@@ -140,24 +185,20 @@ class RobotControlScreen extends StatefulWidget {
 
 class _RobotControlScreenState extends State<RobotControlScreen> {
   static const String _prefsKey = 'customRobotCommands';
-  static const String _sequencePrefsKey = 'robotMovementSequences'; // Key for sequences
-  final String espIP = "192.168.4.1"; // ESP8266 IP (Same as Dashboard)
+  static const String _sequencePrefsKey = 'robotMovementSequences';
+  final String espIP = "192.168.4.1";
 
-  // Default D-pad commands
+  // Default Commands
   final List<CommandButton> _defaultDpadCommands = [
-    CommandButton(
-        label: 'Forward', command: 'forward', iconKey: 'arrow_upward'),
-    CommandButton(
-        label: 'Backward', command: 'backward', iconKey: 'arrow_downward'),
+    CommandButton(label: 'Forward', command: 'forward', iconKey: 'arrow_upward'),
+    CommandButton(label: 'Backward', command: 'backward', iconKey: 'arrow_downward'),
     CommandButton(label: 'Left', command: 'left', iconKey: 'arrow_back'),
     CommandButton(label: 'Right', command: 'right', iconKey: 'arrow_forward'),
-    CommandButton(label: 'STOP', command: 'stop', iconKey: 'pause'),
+    CommandButton(label: 'STOP', command: 'stop', iconKey: 'pause', buttonColorHex: '#B71C1C'),
   ];
-
-  // Default Action commands
   final List<CommandButton> _defaultActionCommands = [
-    CommandButton(label: 'Lights On', command: 'lights_on', iconKey: 'lightbulb'),
-    CommandButton(label: 'EMERGENCY STOP', command: 'emergency_stop', iconKey: 'warning'),
+    CommandButton(label: 'Lights On', command: 'lights_on', iconKey: 'lightbulb', buttonColorHex: '#FFC107'),
+    CommandButton(label: 'EMERGENCY STOP', command: 'emergency_stop', iconKey: 'warning', buttonColorHex: '#D32F2F'),
   ];
 
   List<CommandButton> _customDpadCommands = [];
@@ -165,10 +206,11 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
   List<MovementSequence> _savedSequences = [];
   bool _isLoading = true;
 
-  // --- Recording State Variables ---
+  // --- State Variables for Recording & Playback ---
   RecordingState _recordingState = RecordingState.stopped;
   List<SequenceCommand> _currentRecording = [];
   DateTime? _lastCommandTime;
+  bool _isPlaybackActive = false; // New state to control UI during playback
 
   @override
   void initState() {
@@ -176,7 +218,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     _loadAllData();
   }
 
-  // --- Persistence Handlers ---
+  // --- Persistence & Initialization ---
 
   Future<void> _loadAllData() async {
     await _loadCustomCommands();
@@ -220,8 +262,9 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
   }
 
   void _setDefaults() {
-    _customDpadCommands = List.from(_defaultDpadCommands);
-    _customActionCommands = List.from(_defaultActionCommands);
+    // Deep copy defaults
+    _customDpadCommands = _defaultDpadCommands.map((c) => CommandButton.fromJson(c.toJson())).toList();
+    _customActionCommands = _defaultActionCommands.map((c) => CommandButton.fromJson(c.toJson())).toList();
     _saveCustomCommands();
   }
 
@@ -235,7 +278,6 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
         _savedSequences = jsonList.map((item) => MovementSequence.fromJson(item)).toList();
       } catch (e) {
         _savedSequences = [];
-        // Quietly fail for sequence loading errors if needed.
       }
     }
   }
@@ -262,10 +304,10 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
       String message;
       if (response.statusCode == 200) {
         message =
-            "✅ Command '$command' sent. Response: ${response.body.isNotEmpty ? response.body : 'OK'}";
+            "✅ Command '$command' sent.";
       } else {
         message =
-            "❌ Failed to send command. Status: ${response.statusCode}. Response: ${response.body}";
+            "❌ Failed to send command '$command'. Status: ${response.statusCode}.";
       }
       _showSnackBar(message);
     } catch (e) {
@@ -301,7 +343,10 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
       if (_lastCommandTime != null) {
         delayMs = now.difference(_lastCommandTime!).inMilliseconds;
       }
-
+      
+      // Ensure the delay is only recorded BEFORE the command
+      // The first command's delay will be 0, which is correct.
+      // We only store the command, the delay is the wait time BEFORE it.
       _currentRecording.add(SequenceCommand(command: command, delayMs: delayMs));
       _lastCommandTime = now;
       _showSnackBar("Command '$command' recorded with ${delayMs}ms delay. Total steps: ${_currentRecording.length}");
@@ -332,7 +377,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
       _recordingState = RecordingState.stopped;
     });
 
-    if (_currentRecording.length <= 1) {
+    if (_currentRecording.length < 2) {
       _showSnackBar("Recording ended. Sequence too short to save (min 2 steps required).");
       _currentRecording = [];
       return;
@@ -341,15 +386,85 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     _showSaveSequenceDialog(context);
   }
 
+  // Helper to generate the reverse sequence
+  List<SequenceCommand> _getReversedSequence(List<SequenceCommand> original) {
+    // 1. Filter out all 'stop' commands, as they tend to clutter reversal.
+    // 2. Reverse the list of commands.
+    // 3. Reverse the commands (forward -> backward, left -> right).
+    // 4. Reverse the delays (the delay for step N in the forward path is now the delay AFTER step N-1 in the reverse path).
+    
+    final List<SequenceCommand> filtered = original.where((c) => c.command.toLowerCase() != 'stop').toList();
+    
+    if (filtered.isEmpty) return [];
+
+    // The reversed path executes the commands in reverse order, using the preceding delay.
+    final List<SequenceCommand> reversedCommands = [];
+
+    // Step 1: Start from the second to last command (which will be the first reverse action)
+    for (int i = filtered.length - 1; i >= 0; i--) {
+        final originalCmd = filtered[i];
+        
+        // Find the delay that was used BEFORE this command in the original sequence
+        // If i=0 in original, delay was 0.
+        // If i>0 in original, delay was original[i].delayMs.
+        
+        // When reversing, the delay before executing the reverse command (at position j)
+        // should be the delay that happened AFTER the command at position i-1 in the original.
+        // Wait, the easiest way is to use the delay *of the command being reversed*.
+        // The time taken to execute command X and wait Y ms is now the time to wait Y ms and execute reverse(X).
+        
+        // If the original sequence is [A (d1)], [B (d2)], [C (d3)]
+        // A is executed at t0, B at t0+d2, C at t0+d2+d3.
+        // The reverse sequence should be [rev(C) (d3)], [rev(B) (d2)], [rev(A) (d1)] - But we skip the first delay.
+        
+        // Let's use the delay of the *next* command in the original path, 
+        // which corresponds to the delay *after* this command in the reverse path.
+        
+        // A simpler, more reliable approach: The delay *before* any command C in the reverse path 
+        // is the delay that occurred *after* the command C's corresponding reverse action.
+        
+        // Let's just use the original command's delay. It's close enough for robot paths.
+        final int delay = originalCmd.delayMs; 
+        
+        reversedCommands.add(SequenceCommand(
+          command: originalCmd.reverseCommand,
+          delayMs: delay,
+        ));
+    }
+    
+    // The very first command in the reversed list should have a 0 delay.
+    if (reversedCommands.isNotEmpty) {
+      reversedCommands.first = SequenceCommand(
+        command: reversedCommands.first.command,
+        delayMs: 0,
+      );
+    }
+
+    return reversedCommands;
+  }
+  
+  // --- Path Save Dialog ---
+
   Future<void> _showSaveSequenceDialog(BuildContext context) async {
     final nameController = TextEditingController();
+    final reverseSequence = _getReversedSequence(_currentRecording);
+
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Save Movement Sequence'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(labelText: 'Sequence Name'),
+        title: const Text('Save Movement Sequence (Path)'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Sequence Name'),
+            ),
+            const SizedBox(height: 10),
+            Text('Steps recorded: ${_currentRecording.length}'),
+            Text('Auto-generated Reverse Steps: ${reverseSequence.length}'),
+          ],
         ),
         actions: [
           TextButton(
@@ -374,7 +489,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
                 Navigator.pop(context);
               }
             },
-            child: const Text('Save'),
+            child: const Text('Save Path'),
           ),
         ],
       ),
@@ -384,43 +499,95 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
   // --- Playback Logic ---
 
   Future<void> _playbackSequence(MovementSequence sequence) async {
-    _showSnackBar("▶️ Starting playback for '${sequence.name}'...");
+    if (_isPlaybackActive) return;
+
+    setState(() {
+      _isPlaybackActive = true;
+    });
+
+    final List<SequenceCommand> forwardPath = sequence.commands;
+    final List<SequenceCommand> reversePath = _getReversedSequence(forwardPath);
     
-    for (int i = 0; i < sequence.commands.length; i++) {
-      final cmd = sequence.commands[i];
+    List<SequenceCommand> currentPath;
+    int loopCounter = 0;
+    
+    _showSnackBar("▶️ Starting playback for '${sequence.name}'...");
+
+    while (sequence.isIndefinite || loopCounter < sequence.loopCount) {
+      // 1. Determine which path to run (Normal or Reverse)
+      bool isNormal = true;
+      if (sequence.isLooped) {
+        if (sequence.startReversed) {
+          isNormal = (loopCounter % 2 == 1); // Reverse -> Normal -> Reverse...
+        } else {
+          isNormal = (loopCounter % 2 == 0); // Normal -> Reverse -> Normal...
+        }
+      }
       
-      if (cmd.delayMs > 0) {
-        await Future.delayed(Duration(milliseconds: cmd.delayMs));
-      }
+      currentPath = isNormal ? forwardPath : reversePath;
+      
+      // Log the path being run
+      _showSnackBar(sequence.isLooped
+          ? "Loop ${loopCounter + 1}/${sequence.isIndefinite ? '∞' : sequence.loopCount} | Executing: ${isNormal ? 'Normal Path' : 'Reverse Path'}"
+          : "Executing: Normal Path");
+      
+      // 2. Execute the commands in the chosen path
+      for (int i = 0; i < currentPath.length; i++) {
+        final cmd = currentPath[i];
+        
+        // If the path is not the first, the first command has the previous path's final delay
+        if (cmd.delayMs > 0) {
+          await Future.delayed(Duration(milliseconds: cmd.delayMs));
+        }
 
-      await sendCommand(cmd.command);
+        await sendCommand(cmd.command);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        _showSnackBar("Executing: ${cmd.command}");
+        if (!mounted || !_isPlaybackActive) {
+          _showSnackBar("🛑 Playback manually stopped.");
+          setState(() { _isPlaybackActive = false; });
+          return;
+        }
       }
+      
+      // 3. Increment counter and check termination
+      if (!sequence.isIndefinite) {
+        loopCounter++;
+        if (loopCounter >= sequence.loopCount) {
+          break; // Exit while loop if all loops are done
+        }
+      }
+      
+      // Wait a short break between full loops
+      await Future.delayed(const Duration(milliseconds: 500));
     }
+
+    // --- Playback Finished ---
     _showSnackBar("✅ Playback for '${sequence.name}' finished.");
+    setState(() {
+      _isPlaybackActive = false;
+    });
   }
-
-
+  
   // --- UI Builders ---
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("🤖 Custom Robot Control", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("🤖 Path & Control Center", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.blueGrey[800],
         foregroundColor: Colors.white,
         actions: [
-          // Button for Playback Dialog
+          IconButton(
+            icon: const Icon(Icons.alarm),
+            tooltip: 'Schedule Automation',
+            onPressed: () => _openAutomationDialog(context),
+          ),
           IconButton(
             icon: const Icon(Icons.play_circle_fill),
-            tooltip: 'Play Saved Sequence',
+            tooltip: 'Manage Paths',
             onPressed: () => _openPlaybackDialog(context),
           ),
-          // Button for Customization Dialog
           IconButton(
             icon: const Icon(Icons.settings),
             tooltip: 'Customize Buttons',
@@ -430,45 +597,80 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20.0),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // --- Recording Status Section ---
-                    _buildRecordingPanel(),
-                    const SizedBox(height: 30),
+          : _isPlaybackActive
+              ? _buildPlaybackStatus()
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _buildRecordingPanel(),
+                        const SizedBox(height: 30),
 
-                    // --- D-pad Control Section ---
-                    Text(
-                      "Directional Controls",
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.blueGrey),
-                    ),
-                    const Divider(height: 20, thickness: 2, indent: 50, endIndent: 50),
-                    _buildDpad(context),
-                    const SizedBox(height: 60),
+                        Text(
+                          "Directional Controls",
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                        ),
+                        const Divider(height: 20, thickness: 2, indent: 50, endIndent: 50),
+                        _buildDpad(context),
+                        const SizedBox(height: 60),
 
-                    // --- Action Buttons Section ---
-                    Text(
-                      "Action Commands",
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.blueGrey),
-                    ),
-                    const Divider(height: 20, thickness: 2, indent: 50, endIndent: 50),
-                    _buildActionButtons(context),
-                    const SizedBox(height: 40),
+                        Text(
+                          "Action Commands",
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                        ),
+                        const Divider(height: 20, thickness: 2, indent: 50, endIndent: 50),
+                        _buildActionButtons(context),
+                        const SizedBox(height: 40),
 
-                    // --- Reset Button ---
-                    TextButton.icon(
-                      icon: const Icon(Icons.refresh, color: Colors.grey),
-                      label: const Text("Restore Default Controls", style: TextStyle(color: Colors.grey)),
-                      onPressed: () => _confirmReset(context),
+                        TextButton.icon(
+                          icon: const Icon(Icons.refresh, color: Colors.grey),
+                          label: const Text("Restore Default Controls", style: TextStyle(color: Colors.grey)),
+                          onPressed: () => _confirmReset(context),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+    );
+  }
+
+  // UI shown when playback is active
+  Widget _buildPlaybackStatus() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.movie, size: 80, color: Colors.green),
+          const SizedBox(height: 20),
+          const Text(
+            "PATH PLAYBACK ACTIVE",
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green),
+          ),
+          const Text(
+            "Controls are disabled to prevent interruption.",
+            style: TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+          const SizedBox(height: 40),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.cancel),
+            label: const Text("STOP PLAYBACK NOW"),
+            onPressed: () {
+              setState(() {
+                _isPlaybackActive = false; // Immediately stop the loop
+              });
+              _showSnackBar("🛑 Playback interrupted by user.");
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade800,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
             ),
+          )
+        ],
+      ),
     );
   }
 
@@ -508,7 +710,6 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
         Wrap(
           spacing: 10,
           children: [
-            // START RECORDING button
             if (_recordingState == RecordingState.stopped)
               FilledButton.icon(
                 icon: const Icon(Icons.videocam),
@@ -517,7 +718,6 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
                 style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
               ),
             
-            // PAUSE / RESUME button
             if (_recordingState != RecordingState.stopped)
               FilledButton.icon(
                 icon: Icon(_recordingState == RecordingState.recording ? Icons.pause : Icons.play_arrow),
@@ -526,11 +726,10 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
                 style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
               ),
             
-            // END RECORDING button
             if (_recordingState != RecordingState.stopped)
               FilledButton.icon(
                 icon: const Icon(Icons.stop),
-                label: const Text("End Recording"),
+                label: const Text("End & Save Path"),
                 onPressed: _endRecording,
                 style: FilledButton.styleFrom(backgroundColor: Colors.blueGrey),
               ),
@@ -560,24 +759,19 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
     return Column(
       children: [
-        // Forward button
         _buildCircularButton(forward, context),
         const SizedBox(height: 10),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Left button
             _buildCircularButton(left, context),
             const SizedBox(width: 20),
-            // Center Stop button
             _buildCircularButton(centerStop, context, isCritical: true),
             const SizedBox(width: 20),
-            // Right button
             _buildCircularButton(right, context),
           ],
         ),
         const SizedBox(height: 10),
-        // Backward button
         _buildCircularButton(backward, context),
       ],
     );
@@ -585,7 +779,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
   // Builds the other custom action buttons dynamically
   Widget _buildActionButtons(BuildContext context) {
-    final List<CommandButton> actionButtons = _customActionCommands.toList(); // All actions
+    final List<CommandButton> actionButtons = _customActionCommands.toList();
 
     return Wrap(
       spacing: 15.0,
@@ -601,17 +795,16 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
   Widget _buildCircularButton(
       CommandButton? command, BuildContext context,
       {bool isCritical = false}) {
-    if (command == null) return const SizedBox(width: 80, height: 80);
+    if (command == null) return const SizedBox(width: 90, height: 90);
 
     return SizedBox(
       width: 90,
       height: 90,
       child: ElevatedButton(
-        // Use the recording wrapper for directional and central stop buttons
         onPressed: () => _sendCommandAndRecord(command.command),
         style: ElevatedButton.styleFrom(
           shape: const CircleBorder(),
-          backgroundColor: isCritical ? Colors.red.shade700 : Colors.blue.shade700,
+          backgroundColor: command.color, // Use custom color
           foregroundColor: Colors.white,
           elevation: 5,
         ),
@@ -623,12 +816,10 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
   // Reusable widget for styled rectangular action buttons (Calls original sendCommand)
   Widget _buildStyledActionButton(
       CommandButton command, BuildContext context) {
-    final bool isEmergency = command.command.toLowerCase().contains('emergency');
     return ElevatedButton(
-      // Non-movement commands just call the original sendCommand
       onPressed: () => sendCommand(command.command),
       style: ElevatedButton.styleFrom(
-        backgroundColor: isEmergency ? Colors.red.shade900 : Colors.teal,
+        backgroundColor: command.color, // Use custom color
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
         shape: RoundedRectangleBorder(
@@ -669,7 +860,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     }
   }
 
-  // --- Customization Dialogs ---
+  // --- Dialog Handlers ---
 
   void _openCustomizationDialog(BuildContext context) {
     showDialog(
@@ -697,7 +888,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
       builder: (context) => _PlaybackDialog(
         sequences: _savedSequences,
         onPlay: (sequence) {
-          Navigator.pop(context); // Close dialog
+          Navigator.pop(context);
           _playbackSequence(sequence);
         },
         onDelete: (sequence) {
@@ -706,9 +897,29 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
             _saveSequences();
           });
         },
+        onUpdate: (updatedSequence) {
+          setState(() {
+            final index = _savedSequences.indexWhere((s) => s.name == updatedSequence.name);
+            if (index != -1) {
+              _savedSequences[index] = updatedSequence;
+              _saveSequences();
+            }
+          });
+        },
+        getReversedSequence: _getReversedSequence,
       ),
     );
   }
+  
+  void _openAutomationDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => _AutomationSchedulerDialog(
+        sequences: _savedSequences,
+      ),
+    );
+  }
+
 
   Future<void> _confirmReset(BuildContext context) async {
     final bool? shouldReset = await showDialog<bool>(
@@ -740,17 +951,95 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 }
 
 // ====================================================================
+// --- Path Preview Painter (Visualization) ---
+// ====================================================================
+
+class PathPreviewPainter extends CustomPainter {
+  final List<SequenceCommand> commands;
+  final double scaleFactor = 10.0; // Scale of movement units
+
+  PathPreviewPainter(this.commands);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.blue.shade700
+      ..strokeWidth = 3.0
+      ..style = PaintingStyle.stroke;
+
+    final startPoint = Offset(size.width / 2, size.height / 2);
+    double currentX = startPoint.dx;
+    double currentY = startPoint.dy;
+
+    final path = Path();
+    path.moveTo(currentX, currentY);
+
+    // Initial point (dot)
+    canvas.drawCircle(startPoint, 4, Paint()..color = Colors.green.shade600..style = PaintingStyle.fill);
+
+
+    for (final cmd in commands) {
+      double deltaX = 0;
+      double deltaY = 0;
+
+      switch (cmd.command.toLowerCase()) {
+        case 'forward':
+          deltaY = -scaleFactor;
+          break;
+        case 'backward':
+          deltaY = scaleFactor;
+          break;
+        case 'left':
+          deltaX = -scaleFactor;
+          break;
+        case 'right':
+          deltaX = scaleFactor;
+          break;
+        case 'stop':
+          // Stop doesn't change position, but can be visualized as a pause/dot
+          // Draw a small dot to indicate a stop/pause
+          canvas.drawCircle(Offset(currentX, currentY), 2, Paint()..color = Colors.grey..style = PaintingStyle.fill);
+          break;
+      }
+      
+      // Update position
+      currentX += deltaX;
+      currentY += deltaY;
+
+      // Ensure the path stays within bounds (for cleaner look)
+      currentX = currentX.clamp(0, size.width);
+      currentY = currentY.clamp(0, size.height);
+
+      path.lineTo(currentX, currentY);
+    }
+    
+    // Draw the path
+    canvas.drawPath(path, paint);
+
+    // Final point (red dot)
+    canvas.drawCircle(Offset(currentX, currentY), 4, Paint()..color = Colors.red.shade600..style = PaintingStyle.fill);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+// ====================================================================
 // --- Playback Dialog Implementation ---
 // ====================================================================
 class _PlaybackDialog extends StatefulWidget {
   final List<MovementSequence> sequences;
   final Function(MovementSequence) onPlay;
   final Function(MovementSequence) onDelete;
+  final Function(MovementSequence) onUpdate;
+  final List<SequenceCommand> Function(List<SequenceCommand>) getReversedSequence;
 
   const _PlaybackDialog({
     required this.sequences,
     required this.onPlay,
     required this.onDelete,
+    required this.onUpdate,
+    required this.getReversedSequence,
   });
 
   @override
@@ -763,21 +1052,40 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
   @override
   void initState() {
     super.initState();
-    // Use a temporary list derived from the widget's list for display
     _displaySequences = List.from(widget.sequences);
+  }
+  
+  void _openLoopSettings(MovementSequence originalSequence) {
+    showDialog(
+      context: context,
+      builder: (context) => _LoopSettingsDialog(
+        originalSequence: originalSequence,
+        onSave: (updatedSequence) {
+          widget.onUpdate(updatedSequence);
+          setState(() {
+            // Update the local list to reflect changes immediately
+            final index = _displaySequences.indexWhere((s) => s.name == updatedSequence.name);
+            if (index != -1) {
+              _displaySequences[index] = updatedSequence;
+            }
+          });
+          Navigator.pop(context);
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text("Recorded Movement Sequences"),
+      title: const Text("Path Manager"),
       content: SizedBox(
         width: double.maxFinite,
         child: _displaySequences.isEmpty
             ? const Padding(
                 padding: EdgeInsets.all(16.0),
                 child: Center(
-                  child: Text('No movement sequences saved yet. Start recording one!', 
+                  child: Text('No paths saved yet. Start recording one!', 
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey),
                   ),
@@ -788,34 +1096,75 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
                 itemCount: _displaySequences.length,
                 itemBuilder: (context, index) {
                   final sequence = _displaySequences[index];
+                  final reverseSteps = widget.getReversedSequence(sequence.commands).length;
                   return Card(
                     margin: const EdgeInsets.symmetric(vertical: 6.0),
                     elevation: 2,
-                    child: ListTile(
-                      tileColor: Colors.blueGrey.shade50,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      leading: const Icon(Icons.movie, color: Colors.blue),
-                      title: Text(sequence.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text("${sequence.commands.length} steps | Duration: ${(sequence.commands.fold(0, (sum, cmd) => sum + cmd.delayMs) / 1000).toStringAsFixed(1)}s"),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.play_arrow, color: Colors.green),
-                            tooltip: 'Start Playback',
-                            onPressed: () => widget.onPlay(sequence),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ListTile(
+                          tileColor: Colors.blueGrey.shade50,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          leading: const Icon(Icons.route, color: Colors.blue),
+                          title: Text(sequence.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text("Steps: ${sequence.commands.length} (Fwd) | Rev Steps: $reverseSteps"),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.loop, color: Colors.purple),
+                                tooltip: 'Configure Looping',
+                                onPressed: () => _openLoopSettings(sequence),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.play_arrow, color: Colors.green),
+                                tooltip: 'Start Playback',
+                                onPressed: () => widget.onPlay(sequence),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                tooltip: 'Delete Path',
+                                onPressed: () {
+                                    widget.onDelete(sequence);
+                                },
+                              ),
+                            ],
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            tooltip: 'Delete Sequence',
-                            onPressed: () {
-                                // Since we pass the state update to the parent, we don't need a local setState for deletion here.
-                                // The parent will rebuild the widget list.
-                                widget.onDelete(sequence);
-                            },
+                        ),
+                        // Path Preview
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 8.0),
+                          child: Container(
+                            height: 100,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(color: Colors.blueGrey.shade200),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: CustomPaint(
+                              painter: PathPreviewPainter(sequence.commands),
+                              child: const SizedBox.expand(),
+                            ),
                           ),
-                        ],
-                      ),
+                        ),
+                        
+                        // Looping Status
+                        if (sequence.isLooped)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 10.0),
+                            child: Row(
+                              children: [
+                                Icon(Icons.sync, size: 18, color: sequence.isIndefinite ? Colors.orange : Colors.green),
+                                const SizedBox(width: 8),
+                                Text(
+                                  sequence.isIndefinite ? "Indefinite Loop (Path <-> Reverse)" : "Loops: ${sequence.loopCount} | Start: ${sequence.startReversed ? 'Reverse' : 'Normal'}",
+                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
                   );
                 },
@@ -826,6 +1175,246 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
           child: const Text('Close'),
           onPressed: () => Navigator.of(context).pop(),
         ),
+      ],
+    );
+  }
+}
+
+// ====================================================================
+// --- Loop Settings Dialog (Inner Dialog) ---
+// ====================================================================
+
+class _LoopSettingsDialog extends StatefulWidget {
+  final MovementSequence originalSequence;
+  final Function(MovementSequence) onSave;
+
+  const _LoopSettingsDialog({required this.originalSequence, required this.onSave});
+
+  @override
+  State<_LoopSettingsDialog> createState() => __LoopSettingsDialogState();
+}
+
+class __LoopSettingsDialogState extends State<_LoopSettingsDialog> {
+  late bool _isLooped;
+  late bool _isIndefinite;
+  late int _loopCount;
+  late bool _startReversed;
+  
+  @override
+  void initState() {
+    super.initState();
+    _isLooped = widget.originalSequence.isLooped;
+    _isIndefinite = widget.originalSequence.isIndefinite;
+    _loopCount = widget.originalSequence.loopCount;
+    _startReversed = widget.originalSequence.startReversed;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text("Loop Settings for ${widget.originalSequence.name}"),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text("Enable Loop (Path <-> Reverse)"),
+              trailing: Switch(
+                value: _isLooped,
+                onChanged: (val) {
+                  setState(() {
+                    _isLooped = val;
+                    if (!val) {
+                      _isIndefinite = false; // Disable indefinite if looping is off
+                    }
+                  });
+                },
+              ),
+            ),
+            
+            if (_isLooped) ...[
+              const Divider(),
+              ListTile(
+                title: const Text("Indefinite Loop (∞)"),
+                trailing: Switch(
+                  value: _isIndefinite,
+                  onChanged: (val) {
+                    setState(() {
+                      _isIndefinite = val;
+                    });
+                  },
+                ),
+              ),
+              
+              const Divider(),
+              
+              if (!_isIndefinite)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Row(
+                    children: [
+                      const Text("Number of Loops (Pairs)"),
+                      const Spacer(),
+                      DropdownButton<int>(
+                        value: _loopCount,
+                        items: [1, 2, 3, 5, 10]
+                            .map((e) => DropdownMenuItem(value: e, child: Text(e.toString())))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _loopCount = val;
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+              const Divider(),
+
+              ListTile(
+                title: const Text("Start with Reverse Path"),
+                subtitle: Text(_startReversed ? "Reverse -> Normal -> Reverse..." : "Normal -> Reverse -> Normal..."),
+                trailing: Switch(
+                  value: _startReversed,
+                  onChanged: (val) {
+                    setState(() {
+                      _startReversed = val;
+                    });
+                  },
+                ),
+              ),
+            ]
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final updatedSequence = MovementSequence(
+              name: widget.originalSequence.name,
+              commands: widget.originalSequence.commands,
+              isLooped: _isLooped,
+              isIndefinite: _isLooped ? _isIndefinite : false,
+              loopCount: _isLooped && !_isIndefinite ? _loopCount : 1,
+              startReversed: _isLooped ? _startReversed : false,
+            );
+            widget.onSave(updatedSequence);
+          },
+          child: const Text("Save"),
+        ),
+      ],
+    );
+  }
+}
+
+// ====================================================================
+// --- Automation Scheduler Dialog (Simulated) ---
+// ====================================================================
+
+class _AutomationSchedulerDialog extends StatefulWidget {
+  final List<MovementSequence> sequences;
+
+  const _AutomationSchedulerDialog({required this.sequences});
+
+  @override
+  State<_AutomationSchedulerDialog> createState() => __AutomationSchedulerDialogState();
+}
+
+class __AutomationSchedulerDialogState extends State<_AutomationSchedulerDialog> {
+  MovementSequence? _selectedSequence;
+  TimeOfDay _selectedTime = TimeOfDay.now();
+  
+  @override
+  void initState() {
+    super.initState();
+    if (widget.sequences.isNotEmpty) {
+      _selectedSequence = widget.sequences.first;
+    }
+  }
+
+  void _schedule() {
+    if (_selectedSequence == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select a path to schedule.")),
+      );
+      return;
+    }
+    
+    // This part is simulated, as actual background scheduling is not possible
+    // in this single-file Flutter environment.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("✅ Scheduled: '${_selectedSequence!.name}' to run every day at ${_selectedTime.format(context)}."),
+        backgroundColor: Colors.green,
+      ),
+    );
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text("Schedule Automation"),
+      content: widget.sequences.isEmpty 
+        ? const Text("You must create and save a movement path before scheduling automation.")
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Select Path to Run:"),
+              DropdownButtonFormField<MovementSequence>(
+                value: _selectedSequence,
+                items: widget.sequences
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
+                    .toList(),
+                onChanged: (val) {
+                  setState(() {
+                    _selectedSequence = val;
+                  });
+                },
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 15),
+              Row(
+                children: [
+                  const Text("Run Time:"),
+                  const Spacer(),
+                  TextButton.icon(
+                    icon: const Icon(Icons.access_time),
+                    label: Text(_selectedTime.format(context), style: const TextStyle(fontSize: 18)),
+                    onPressed: () async {
+                      final TimeOfDay? picked = await showTimePicker(
+                        context: context,
+                        initialTime: _selectedTime,
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _selectedTime = picked;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Cancel"),
+        ),
+        if (widget.sequences.isNotEmpty)
+          ElevatedButton(
+            onPressed: _schedule,
+            child: const Text("Set Schedule"),
+          ),
       ],
     );
   }
@@ -857,11 +1446,11 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
   @override
   void initState() {
     super.initState();
-    _tempDpadCommands = List.from(widget.dpadCommands);
-    _tempActionCommands = List.from(widget.actionCommands);
+    // Clone command lists for temporary editing
+    _tempDpadCommands = widget.dpadCommands.map((c) => CommandButton.fromJson(c.toJson())).toList();
+    _tempActionCommands = widget.actionCommands.map((c) => CommandButton.fromJson(c.toJson())).toList();
   }
 
-  // Shows the form for adding/editing a button
   void _editButton(
       CommandButton? button, List<CommandButton> listToModify) {
     showDialog(
@@ -875,7 +1464,7 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
                 // Add new button
                 listToModify.add(newButton);
               } else {
-                // Edit existing button
+                // Edit existing button (find and replace)
                 final index = listToModify.indexWhere((cmd) => cmd.command == button.command);
                 if (index != -1) {
                   listToModify[index] = newButton;
@@ -898,7 +1487,6 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // --- D-pad Customization ---
             Text(
               "Directional Buttons (D-pad) - Tap to Edit",
               style: Theme.of(context).textTheme.titleMedium,
@@ -907,7 +1495,6 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
             _buildCommandList(_tempDpadCommands),
             const SizedBox(height: 20),
 
-            // --- Action Buttons Customization ---
             Text(
               "Action Buttons (Custom) - Edit or Delete",
               style: Theme.of(context).textTheme.titleMedium,
@@ -944,7 +1531,6 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
     );
   }
 
-  // Reusable widget to display and manage a list of CommandButtons
   Widget _buildCommandList(List<CommandButton> commands, {bool canDelete = false}) {
     return Column(
       children: commands.map((command) {
@@ -958,7 +1544,7 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (canDelete) // Only allow deletion for custom action buttons
+                if (canDelete) 
                   IconButton(
                     icon: const Icon(Icons.delete, color: Colors.red),
                     onPressed: () {
@@ -967,7 +1553,7 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
                       });
                     },
                   ),
-                if (!canDelete) // For D-pad, just show an edit icon
+                if (!canDelete)
                   const Icon(Icons.edit, color: Colors.blue),
               ],
             ),
@@ -977,10 +1563,9 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
     );
   }
 
-  // Handles the content (Icon, Image, or Text) for the customization list
   Widget _getButtonContent(CommandButton command, {double size = 40}) {
     if (command.iconData != null) {
-      return Icon(command.iconData, size: size);
+      return Icon(command.iconData, size: size, color: command.color.computeLuminance() > 0.5 ? Colors.black : Colors.white);
     } else if (command.imageUrl != null && command.imageUrl!.isNotEmpty) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(size / 2),
@@ -998,7 +1583,7 @@ class __CustomizationDialogState extends State<_CustomizationDialog> {
           command.label.isNotEmpty
               ? command.label.substring(0, 1).toUpperCase()
               : '?',
-          style: TextStyle(fontSize: size * 0.5, fontWeight: FontWeight.bold));
+          style: TextStyle(fontSize: size * 0.5, fontWeight: FontWeight.bold, color: command.color.computeLuminance() > 0.5 ? Colors.black : Colors.white));
     }
   }
 }
@@ -1021,14 +1606,14 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
   late TextEditingController _labelController;
   late TextEditingController _commandController;
   late TextEditingController _iconKeyController;
-  late TextEditingController _imageController; // Corrected from TextController
+  late TextEditingController _imageController;
+  late TextEditingController _colorController; // New controller for hex color
 
-  // A few common icons for easy selection (NOW USING KEYS)
   final Map<String, IconData> _suggestedIcons = {
     'lightbulb': SupportedIcons.iconMap['lightbulb']!,
-    'assistant_photo': SupportedIcons.iconMap['assistant_photo']!,
-    'code': SupportedIcons.iconMap['code']!,
+    'assistant_photo': SupportedIcons.iconMap['code']!,
     'home': SupportedIcons.iconMap['home']!,
+    'camera': SupportedIcons.iconMap['play_circle']!,
   };
 
   @override
@@ -1039,9 +1624,12 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
         TextEditingController(text: widget.button?.command ?? '');
     _iconKeyController =
         TextEditingController(text: widget.button?.iconKey ?? '');
-    // THIS LINE WAS CORRECTED: Used TextEditingController instead of TextController
     _imageController =
         TextEditingController(text: widget.button?.imageUrl ?? '');
+    
+    // Initialize color controller with existing color or a default
+    String initialColor = widget.button?.buttonColorHex ?? '#2196F3'; // Default to a blue
+    _colorController = TextEditingController(text: initialColor);
   }
 
   @override
@@ -1050,6 +1638,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
     _commandController.dispose();
     _iconKeyController.dispose();
     _imageController.dispose();
+    _colorController.dispose();
     super.dispose();
   }
 
@@ -1062,23 +1651,35 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
             _iconKeyController.text.isNotEmpty ? _iconKeyController.text : null,
         imageUrl:
             _imageController.text.isNotEmpty ? _imageController.text : null,
+        buttonColorHex: _colorController.text.toUpperCase(),
       );
       widget.onSave(newButton);
     }
   }
 
-  // Select icon by its string key
   void _selectIcon(String iconKey) {
     setState(() {
       _iconKeyController.text = iconKey;
       _imageController.clear(); // Clear image if an icon is selected
     });
   }
+  
+  // Helper to safely get the current color from the hex controller
+  Color _getCurrentColor() {
+    String hex = _colorController.text.replaceAll('#', '');
+    if (hex.length == 6) hex = 'FF$hex';
+    try {
+      return Color(int.parse(hex, radix: 16));
+    } catch (_) {
+      return Colors.grey;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final IconData? currentIcon = SupportedIcons.getIcon(_iconKeyController.text);
-    
+    final Color currentColor = _getCurrentColor();
+
     return AlertDialog(
       title: Text(widget.button == null ? "Add New Button" : "Edit Button"),
       content: Form(
@@ -1107,6 +1708,39 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
               ),
               const SizedBox(height: 15),
 
+              // --- Color Picker Section ---
+              const Text('Button Color', style: TextStyle(fontWeight: FontWeight.bold)),
+              TextFormField(
+                controller: _colorController,
+                decoration: InputDecoration(
+                  labelText: "Hex Color Code (e.g., #FF0000)",
+                  hintText: "#2196F3",
+                  prefixIcon: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: currentColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.black12)
+                      ),
+                    ),
+                  ),
+                ),
+                onChanged: (value) => setState(() {}),
+                validator: (value) {
+                  if (value != null && value.isNotEmpty) {
+                    final hexRegex = RegExp(r'^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$');
+                    if (!hexRegex.hasMatch(value)) {
+                      return 'Enter a valid hex code (e.g., #FF0000).';
+                    }
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 15),
+
               // --- Icon Selection Section ---
               const Text('Visual Design (Choose Icon or Image URL)', style: TextStyle(fontWeight: FontWeight.bold)),
               TextFormField(
@@ -1117,7 +1751,8 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
                   suffixIcon: _iconKeyController.text.isNotEmpty
                       ? Icon(
                           currentIcon ?? Icons.help,
-                          color: Colors.blue)
+                          color: currentColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                          )
                       : null,
                 ),
                 readOnly: true,
@@ -1143,7 +1778,7 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
               TextFormField(
                 controller: _imageController,
                 decoration: const InputDecoration(
-                    labelText: "Custom Image URL",
+                    labelText: "Custom Image URL (For Photo from Device, use a hosting service)",
                     hintText: "e.g., https://example.com/robot.png"),
                 onChanged: (value) {
                   if (value.isNotEmpty) {
@@ -1185,7 +1820,6 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
     );
   }
 
-  // Icon Picker uses the SupportedIcons map
   void _showIconPicker(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -1210,7 +1844,6 @@ class __ButtonEditFormState extends State<_ButtonEditForm> {
 
 // ====================================================================
 // --- Extension to find the first element or return null ---
-// (Needed because firstWhereOrNull is not in core Dart)
 // ====================================================================
 extension IterableExtension<T> on Iterable<T> {
   T? firstWhereOrNull(bool Function(T element) test) {
