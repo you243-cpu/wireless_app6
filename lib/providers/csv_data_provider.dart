@@ -1,4 +1,6 @@
 // lib/providers/csv_data_provider.dart
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 
 class CSVDataProvider extends ChangeNotifier {
@@ -12,6 +14,9 @@ class CSVDataProvider extends ChangeNotifier {
   List<DateTime> timestamps = [];
   List<double> latitudes = [];
   List<double> longitudes = [];
+  String _sourceKey = '';
+
+  String get sourceKey => _sourceKey;
 
   void updateData({
     required List<double> pH,
@@ -35,8 +40,26 @@ class CSVDataProvider extends ChangeNotifier {
     this.timestamps = timestamps;
     this.latitudes = latitudes;
     this.longitudes = longitudes;
+    _sourceKey = _computeDatasetHash();
     notifyListeners();
   }
 
   bool get hasData => timestamps.isNotEmpty;
+
+  String _computeDatasetHash() {
+    final parts = <String>[
+      timestamps.map((d) => d.toIso8601String()).join(','),
+      latitudes.map((v) => v.toString()).join(','),
+      longitudes.map((v) => v.toString()).join(','),
+      pH.map((v) => v.toString()).join(','),
+      temperature.map((v) => v.toString()).join(','),
+      humidity.map((v) => v.toString()).join(','),
+      ec.map((v) => v.toString()).join(','),
+      n.map((v) => v.toString()).join(','),
+      p.map((v) => v.toString()).join(','),
+      k.map((v) => v.toString()).join(','),
+    ];
+    final digest = sha1.convert(utf8.encode(parts.join('|'))).toString();
+    return digest;
+  }
 }
