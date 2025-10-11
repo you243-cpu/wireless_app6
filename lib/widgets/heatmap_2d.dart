@@ -27,7 +27,7 @@ class Heatmap2D extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // 🐛 DEBUG Check: Ensure min/max are valid before rendering
+    //  DEBUG Check: Ensure min/max are valid before rendering
     if (!minValue.isFinite || !maxValue.isFinite || maxValue < minValue) {
       return Center(child: Text("Invalid data range for rendering. Min: $minValue, Max: $maxValue"));
     }
@@ -78,6 +78,7 @@ class Heatmap2D extends StatelessWidget {
               metricLabel: metricLabel,
               isDark: isDark,
               axis: Axis.vertical,
+              gradientMode: GradientMode.valueBased
             ),
           )
         ],
@@ -99,7 +100,7 @@ class _HeatmapPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 🐛 Critical check: Stop painting if the range is invalid
+    //  Critical check: Stop painting if the range is invalid
     if (!minValue.isFinite || !maxValue.isFinite || maxValue < minValue) {
       return; 
     }
