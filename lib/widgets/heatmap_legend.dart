@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/heatmap_service.dart'; // Re-added the required import
 
 // 1. Define the enum to switch between gradient calculation modes
 enum GradientMode {
@@ -12,11 +13,7 @@ enum GradientMode {
   valueBased,
 }
 
-// Mock definition for optimalRanges, needed only for the valueBased mode to compile
-// If your actual heatmap_service.dart defines this, remove this mock.
-const Map<String, List<double>> optimalRangesMock = {
-  'Temperature': [20.0, 24.0], // Example range
-};
+// NOTE: optimalRangesMock has been removed, as the service is now imported.
 
 class HeatmapLegend extends StatelessWidget {
   final double minValue;
@@ -56,9 +53,8 @@ class HeatmapLegend extends StatelessWidget {
       ];
     } else {
       // MODE 2: Value-Based Proportional Gradient (Data Accuracy)
-      // NOTE: This uses the mock data above; replace optimalRangesMock with 
-      // the actual import if needed, or pass optimalRange data explicitly.
-      final optimalRange = optimalRangesMock[metricLabel] ?? [minValue, maxValue];
+      // Now using the imported `optimalRanges` map from heatmap_service.dart
+      final optimalRange = optimalRanges[metricLabel] ?? [minValue, maxValue];
       final optimalMin = optimalRange[0];
       final optimalMax = optimalRange[1];
 
