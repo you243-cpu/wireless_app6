@@ -24,7 +24,11 @@ class HeatmapCacheService {
     } else {
       base = await getApplicationDocumentsDirectory();
     }
-    final dir = Directory('${base.path}/$name');
+    // Avoid duplicating the leaf directory if the user-provided base already ends with it
+    final String normalizedBase = base.path.replaceAll('\\', '/').replaceAll(RegExp(r"/+$"), '');
+    final String leaf = name.toLowerCase();
+    final bool baseEndsWithLeaf = normalizedBase.toLowerCase().endsWith('/$leaf');
+    final dir = Directory(baseEndsWithLeaf ? normalizedBase : '$normalizedBase/$name');
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
