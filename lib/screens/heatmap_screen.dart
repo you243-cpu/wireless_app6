@@ -550,29 +550,46 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                           );
                           final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
                           if (bytes != null) {
-                            final settings = context.read<AppSettings>();
-                            Directory base;
-                            if (settings.saveDirectory.isNotEmpty) {
-                              base = Directory(settings.saveDirectory);
-                              if (!await base.exists()) {
-                                await base.create(recursive: true);
-                              }
-                            } else {
-                              base = await getApplicationDocumentsDirectory();
-                            }
-                            final exportDir = Directory('${base.path}/heatmaps');
-                            if (!await exportDir.exists()) {
-                              await exportDir.create(recursive: true);
-                            }
+                          final settings = context.read<AppSettings>();
+                          // Normalize and avoid duplicating 'heatmaps' folder name
+                          Directory base;
+                          if (settings.saveDirectory.isNotEmpty) {
+                            base = Directory(settings.saveDirectory);
+                          } else {
+                            base = await getApplicationDocumentsDirectory();
+                          }
+                          final String normalizedBase = base.path.replaceAll('\\', '/').replaceAll(RegExp(r"/+$"), '');
+                          final bool endsWithHeatmaps = normalizedBase.toLowerCase().endsWith('/heatmaps');
+                          final Directory exportDir = Directory(endsWithHeatmaps ? normalizedBase : '$normalizedBase/heatmaps');
+                          if (!await exportDir.exists()) {
+                            await exportDir.create(recursive: true);
+                          }
                             final safeMetric = currentMetric.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
                             final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
                             final path = '${exportDir.path}/heatmap_${safeMetric}_$timestamp.png';
                             final file = File(path);
-                            await file.writeAsBytes(bytes.buffer.asUint8List());
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Saved PNG: $path')),
-                              );
+                            try {
+                              await file.writeAsBytes(bytes.buffer.asUint8List());
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Saved PNG: $path')),
+                                );
+                              }
+                            } on FileSystemException catch (e) {
+                              // Fallback to app documents dir when permission denied
+                              final fallbackBase = await getApplicationDocumentsDirectory();
+                              final fallbackDir = Directory('${fallbackBase.path}/heatmaps');
+                              if (!await fallbackDir.exists()) {
+                                await fallbackDir.create(recursive: true);
+                              }
+                              final fallbackPath = '${fallbackDir.path}/heatmap_${safeMetric}_$timestamp.png';
+                              final fallbackFile = File(fallbackPath);
+                              await fallbackFile.writeAsBytes(bytes.buffer.asUint8List());
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Saved to app storage (no permission for chosen dir). Path: $fallbackPath')),
+                                );
+                              }
                             }
                           } else {
                             if (mounted) {
@@ -633,7 +650,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Tip: Paste a writable folder path. Files are saved under /heatmaps.',
+                  'Tip: Choose a writable folder (not root of /storage). Files go into a heatmaps subfolder.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               )
