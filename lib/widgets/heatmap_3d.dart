@@ -7,8 +7,9 @@ class Heatmap3D extends StatelessWidget {
   final String metricLabel;
   final double minValue;
   final double maxValue;
+  final List<double>? optimalRangeOverride;
 
-  const Heatmap3D({super.key, required this.grid, required this.metricLabel, required this.minValue, required this.maxValue});
+  const Heatmap3D({super.key, required this.grid, required this.metricLabel, required this.minValue, required this.maxValue, this.optimalRangeOverride});
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +33,7 @@ class Heatmap3D extends StatelessWidget {
                     minValue: minValue,
                     maxValue: maxValue,
                     isDark: isDark,
+                    optimalRangeOverride: optimalRangeOverride,
                   ),
                 ),
               ),
@@ -49,6 +51,7 @@ class _IsoSurfacePainter extends CustomPainter {
   final double minValue;
   final double maxValue;
   final bool isDark;
+  final List<double>? optimalRangeOverride;
 
   _IsoSurfacePainter({
     required this.grid,
@@ -56,6 +59,7 @@ class _IsoSurfacePainter extends CustomPainter {
     required this.minValue,
     required this.maxValue,
     required this.isDark,
+    this.optimalRangeOverride,
   });
 
   @override
@@ -78,7 +82,8 @@ class _IsoSurfacePainter extends CustomPainter {
       for (int c = 0; c < cols; c++) {
         final v = grid[r][c];
         if (!v.isFinite) continue;
-        final color = valueToColor(v, minValue, maxValue, metricLabel);
+        final color = valueToColor(v, minValue, maxValue, metricLabel,
+            optimalRangeOverride: optimalRangeOverride);
         final double safeRange = (maxValue - minValue).abs() < 1e-12 ? 1.0 : (maxValue - minValue);
         final double h = ((v - minValue) / safeRange).clamp(0.0, 1.0) * heightScale + 1.0;
 
@@ -133,7 +138,8 @@ class _IsoSurfacePainter extends CustomPainter {
         oldDelegate.metricLabel != metricLabel ||
         oldDelegate.minValue != minValue ||
         oldDelegate.maxValue != maxValue ||
-        oldDelegate.isDark != isDark;
+        oldDelegate.isDark != isDark ||
+        oldDelegate.optimalRangeOverride != optimalRangeOverride;
   }
 
   Color darken(Color color, double amount) {
