@@ -10,6 +10,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../widgets/heatmap_2d.dart';
 import '../widgets/heatmap_3d.dart';
 import '../widgets/heatmap_surface_3d.dart';
+import '../widgets/heatmap_legend.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 import '../services/gltf_service.dart';
 import 'package:provider/provider.dart';
@@ -39,6 +40,8 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     'All'
   ];
   String currentMetric = 'All';
+  // New: multi-select metrics, default all selected
+  Set<String> selectedMetrics = {};
   DateTime? startTime;
   DateTime? endTime;
   bool is3DView = false;
@@ -52,11 +55,26 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   double geographicWidthRatio = 1.0; // NEW: Aspect ratio for shape correction
   String? gltfModelPath;
   Key _modelViewerKey = UniqueKey();
+  List<double>? _optimalRangeOverride; // averaged optimal range when selecting multiple metrics
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    // Default select all base metrics (exclude 'All') or use persisted settings
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final saved = context.read<AppSettings>().selectedMetrics;
+        setState(() {
+          selectedMetrics = saved.isNotEmpty ? saved : metrics.where((m) => m != 'All').toSet();
+        });
+        _updateGridAndValues();
+      } catch (_) {
+        setState(() {
+          selectedMetrics = metrics.where((m) => m != 'All').toSet();
+        });
+      }
+    });
   }
 
   @override
@@ -241,20 +259,34 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         minValue = 0;
         maxValue = 0;
         geographicWidthRatio = 1.0; // Reset ratio
+        _optimalRangeOverride = null;
       });
       return;
     }
 
-    // Prefer lat/lon seamless grid if available
-    // CHANGE: Function now returns HeatmapGrid
-    final HeatmapGrid heatmapData = heatmapService.createUniformGridFromLatLon(
-      metric: currentMetric,
-      start: startTime!,
-      end: endTime!,
-      // Optional: upsample if only a few unique coords
-      targetCols: null,
-      targetRows: null,
-    );
+    HeatmapGrid heatmapData;
+    if (selectedMetrics.isNotEmpty && selectedMetrics.length > 1) {
+      // Multi-select averaging
+      heatmapData = heatmapService.createUniformGridFromLatLonForMetrics(
+        metrics: selectedMetrics.toList(),
+        start: startTime!,
+        end: endTime!,
+        targetCols: null,
+        targetRows: null,
+      );
+      _optimalRangeOverride = heatmapService.averageOptimalRange(selectedMetrics.toList());
+    } else {
+      // Single metric (or none) uses currentMetric
+      final metricToUse = selectedMetrics.isNotEmpty ? selectedMetrics.first : currentMetric;
+      heatmapData = heatmapService.createUniformGridFromLatLon(
+        metric: metricToUse,
+        start: startTime!,
+        end: endTime!,
+        targetCols: null,
+        targetRows: null,
+      );
+      _optimalRangeOverride = null;
+    }
 
     final newGrid = heatmapData.grid; // Extract grid data
     final allValues = newGrid.expand((row) => row).where((v) => !v.isNaN).toList();
@@ -294,16 +326,20 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       final String seed = isRawKey
           ? keySeed
           : await DefaultAssetBundle.of(context).loadString(keySeed);
-      final key = HeatmapCacheService.buildKey(csvContent: seed, metric: currentMetric);
+      // Include selection set in the cache key to avoid collisions
+      final List<String> sel = selectedMetrics.toList()..sort();
+      final String metricKey = sel.length > 1 ? 'AVG_${sel.join('_')}' : (sel.isNotEmpty ? sel.first : currentMetric);
+      final key = HeatmapCacheService.buildKey(csvContent: seed, metric: metricKey);
       // Use app documents for cached assets to avoid permission issues
       final exists = await HeatmapCacheService.existsPng(key, basePath: null);
       if (!exists) {
         final img = await renderHeatmapImage(
           grid: gridData!,
-          metricLabel: currentMetric,
+          metricLabel: sel.length == 1 ? sel.first : 'Average',
           minValue: minValue,
           maxValue: maxValue,
           cellSize: 24,
+          optimalRangeOverride: _optimalRangeOverride,
         );
         await HeatmapCacheService.writePng(key, img, basePath: null);
       }
@@ -348,16 +384,19 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       // fallback to asset
       seed = await DefaultAssetBundle.of(context).loadString('assets/simulated_soil_square.csv');
     }
-    final key = HeatmapCacheService.buildKey(csvContent: seed, metric: currentMetric);
+    final List<String> sel = selectedMetrics.toList()..sort();
+    final String metricKey = sel.length > 1 ? 'AVG_${sel.join('_')}' : (sel.isNotEmpty ? sel.first : currentMetric);
+    final key = HeatmapCacheService.buildKey(csvContent: seed, metric: metricKey);
     // Keep cache internal to app storage to avoid permission issues
     if (!await HeatmapCacheService.existsPng(key, basePath: null)) {
       if (gridData != null && gridData!.isNotEmpty) {
         final img = await renderHeatmapImage(
           grid: gridData!,
-          metricLabel: currentMetric,
+          metricLabel: sel.length == 1 ? sel.first : 'Average',
           minValue: minValue,
           maxValue: maxValue,
           cellSize: 24,
+          optimalRangeOverride: _optimalRangeOverride,
         );
         await HeatmapCacheService.writePng(key, img, basePath: null);
       }
@@ -381,12 +420,32 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
 
   void _onMetricChanged(String newMetric) {
     setState(() {
-      currentMetric = newMetric;
+      // Toggle selection in multi-select panel
+      if (newMetric == 'All') {
+        // Select all base metrics
+        selectedMetrics = metrics.where((m) => m != 'All').toSet();
+      } else {
+        if (selectedMetrics.contains(newMetric)) {
+          selectedMetrics.remove(newMetric);
+          if (selectedMetrics.isEmpty) {
+            // Keep at least one selected; fallback to this one
+            selectedMetrics = {newMetric};
+          }
+        } else {
+          selectedMetrics.add(newMetric);
+        }
+      }
+      // Keep currentMetric in sync for single selection cases
+      currentMetric = selectedMetrics.length == 1 ? selectedMetrics.first : 'All';
       // Force 3D viewer to reload when metric changes
       if (is3DView) {
         _modelViewerKey = UniqueKey();
       }
     });
+    // Persist selection
+    try {
+      context.read<AppSettings>().setSelectedMetrics(selectedMetrics);
+    } catch (_) {}
     _updateGridAndValues();
     // Try generating PNG for this metric in background
     if (_lastKeySeed != null) {
@@ -493,31 +552,8 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: metrics.map((metric) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                          child: ElevatedButton(
-                            onPressed: () => _onMetricChanged(metric),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: currentMetric == metric
-                                  ? Colors.blue.shade800
-                                  : Colors.grey.shade600,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                            ),
-                            child: Text(metric),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  // Top horizontal legend is rendered inside Heatmap2D; below is the date range control
+                  const SizedBox(height: 8),
                   ElevatedButton.icon(
                     onPressed: _selectDateRange,
                     icon: const Icon(Icons.date_range),
@@ -534,17 +570,91 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  if (is3DView && (gridData != null && gridData!.isNotEmpty))
+                    SizedBox(
+                      height: 36,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: HeatmapLegend(
+                              minValue: minValue,
+                              maxValue: maxValue,
+                              metricLabel: selectedMetrics.length == 1 ? selectedMetrics.first : 'Average',
+                              isDark: isDark,
+                              axis: Axis.horizontal,
+                              thickness: 14,
+                              gradientMode: GradientMode.valueBased,
+                              optimalRangeOverride: _optimalRangeOverride,
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
+                  if (is3DView && (gridData != null && gridData!.isNotEmpty))
+                    const SizedBox(height: 8),
                   Expanded(
                     child: (gridData != null && gridData!.isNotEmpty)
-                        ? (is3DView
-                            ? _buildTexturedPlaneViewer()
-                            : Heatmap2D(
-                                grid: gridData!,
-                                geographicWidthRatio: geographicWidthRatio, // PASS THE NEW RATIO HERE
-                                metricLabel: currentMetric,
-                                minValue: minValue,
-                                maxValue: maxValue,
-                              ))
+                        ? Row(
+                            children: [
+                              // Sidebar with multi-select chips
+                              SizedBox(
+                                width: 180,
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        direction: Axis.horizontal,
+                                        children: metrics
+                                            .where((m) => m != 'All')
+                                            .map((m) => FilterChip(
+                                                  label: Text(m),
+                                                  selected: selectedMetrics.contains(m),
+                                                  onSelected: (_) => _onMetricChanged(m),
+                                                ))
+                                            .toList(),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          TextButton.icon(
+                                            icon: const Icon(Icons.select_all),
+                                            onPressed: () => _onMetricChanged('All'),
+                                            label: const Text('Select All'),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          TextButton.icon(
+                                            icon: const Icon(Icons.clear_all),
+                                            onPressed: () {
+                                              if (metrics.isNotEmpty) {
+                                                _onMetricChanged(metrics.firstWhere((m) => m != 'All'));
+                                              }
+                                            },
+                                            label: const Text('Clear All'),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: is3DView
+                                    ? _buildTexturedPlaneViewer()
+                                    : Heatmap2D(
+                                        grid: gridData!,
+                                        geographicWidthRatio: geographicWidthRatio,
+                                        metricLabel: selectedMetrics.length == 1 ? selectedMetrics.first : 'Average',
+                                        minValue: minValue,
+                                        maxValue: maxValue,
+                                        optimalRangeOverride: _optimalRangeOverride,
+                                      ),
+                              ),
+                            ],
+                          )
                         : const Center(
                             child: Text("No data to display for the selected metric and time range."),
                           ),
@@ -567,11 +677,12 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                           }
                           final img = await renderHeatmapImage(
                             grid: gridData!,
-                            metricLabel: currentMetric,
+                            metricLabel: selectedMetrics.length == 1 ? selectedMetrics.first : 'Average',
                             minValue: minValue,
                             maxValue: maxValue,
                             cellSize: 16,
                             showGridLines: false,
+                            optimalRangeOverride: _optimalRangeOverride,
                           );
                           final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
                           if (bytes != null) {
