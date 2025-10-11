@@ -7,6 +7,7 @@ class HeatmapSurface3D extends StatefulWidget {
   final String metricLabel;
   final double minValue;
   final double maxValue;
+  final List<double>? optimalRangeOverride;
 
   const HeatmapSurface3D({
     super.key,
@@ -14,6 +15,7 @@ class HeatmapSurface3D extends StatefulWidget {
     required this.metricLabel,
     required this.minValue,
     required this.maxValue,
+    this.optimalRangeOverride,
   });
 
   @override
@@ -67,6 +69,7 @@ class _HeatmapSurface3DState extends State<HeatmapSurface3D> {
               yaw: _yaw,
               pitch: _pitch,
               zoom: _zoom,
+              optimalRangeOverride: widget.optimalRangeOverride,
             ),
           ),
         );
@@ -84,6 +87,7 @@ class _SurfacePainter extends CustomPainter {
   final double yaw;
   final double pitch;
   final double zoom;
+  final List<double>? optimalRangeOverride;
 
   _SurfacePainter({
     required this.grid,
@@ -94,6 +98,7 @@ class _SurfacePainter extends CustomPainter {
     required this.yaw,
     required this.pitch,
     required this.zoom,
+    this.optimalRangeOverride,
   });
 
   @override
@@ -197,7 +202,8 @@ class _SurfacePainter extends CustomPainter {
       ..style = PaintingStyle.fill
       ..isAntiAlias = false; // Avoid hairline seams on edges
     for (final tri in tris) {
-      final baseColor = valueToColor(tri.value, minValue, maxValue, metricLabel);
+      final baseColor = valueToColor(tri.value, minValue, maxValue, metricLabel,
+          optimalRangeOverride: optimalRangeOverride);
       final shaded = _applyShade(baseColor, tri.shade);
       paint.color = shaded;
       final path = Path()
@@ -229,7 +235,11 @@ class _SurfacePainter extends CustomPainter {
         oldDelegate.metricLabel != metricLabel ||
         oldDelegate.minValue != minValue ||
         oldDelegate.maxValue != maxValue ||
-        oldDelegate.isDark != isDark;
+        oldDelegate.isDark != isDark ||
+        oldDelegate.yaw != yaw ||
+        oldDelegate.pitch != pitch ||
+        oldDelegate.zoom != zoom ||
+        oldDelegate.optimalRangeOverride != optimalRangeOverride;
   }
 
   double? _avgFinite(List<double> values) {
