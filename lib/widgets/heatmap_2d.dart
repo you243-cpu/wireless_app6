@@ -2,7 +2,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/heatmap_service.dart'; // Ensure this import path is correct
-import 'heatmap_legend.dart';
 
 class Heatmap2D extends StatelessWidget {
   final List<List<double>> grid;
@@ -48,50 +47,18 @@ class Heatmap2D extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.all(8.0),
-      child: Column(
-        children: [
-          // Horizontal legend at the top
-          SizedBox(
-            height: 36,
-            child: Row(
-              children: [
-                Expanded(
-                  child: HeatmapLegend(
-                    minValue: minValue,
-                    maxValue: maxValue,
-                    metricLabel: metricLabel,
-                    isDark: isDark,
-                    axis: Axis.horizontal,
-                    thickness: 14,
-                    gradientMode: GradientMode.valueBased,
-                    optimalRangeOverride: optimalRangeOverride,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: Center( // Center the constrained heatmap within the available space
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return AspectRatio(
-                    // Use grid-based aspect so cells are square on screen
-                    aspectRatio: aspectFromGrid,
-                    child: SizedBox(
-                      width: constraints.maxWidth,
-                      height: constraints.maxHeight,
-                      child: CustomPaint(
-                        painter: _HeatmapPainter(
-                            grid, showGridLines, isDark, metricLabel, minValue, maxValue, optimalRangeOverride),
-                      ),
-                    ),
-                  );
-                },
+      child: Center(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return AspectRatio(
+              aspectRatio: aspectFromGrid,
+              child: CustomPaint(
+                painter: _HeatmapPainter(
+                    grid, showGridLines, isDark, metricLabel, minValue, maxValue, optimalRangeOverride),
               ),
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
