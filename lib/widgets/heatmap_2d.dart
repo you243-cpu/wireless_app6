@@ -11,6 +11,7 @@ class Heatmap2D extends StatelessWidget {
   final String metricLabel;
   final double minValue;
   final double maxValue;
+  final List<double>? optimalRangeOverride;
 
   const Heatmap2D({
     super.key,
@@ -21,6 +22,7 @@ class Heatmap2D extends StatelessWidget {
     required this.metricLabel,
     required this.minValue,
     required this.maxValue,
+    this.optimalRangeOverride,
   });
 
   @override
@@ -46,8 +48,29 @@ class Heatmap2D extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.all(8.0),
-      child: Row(
+      child: Column(
         children: [
+          // Horizontal legend at the top
+          SizedBox(
+            height: 36,
+            child: Row(
+              children: [
+                Expanded(
+                  child: HeatmapLegend(
+                    minValue: minValue,
+                    maxValue: maxValue,
+                    metricLabel: metricLabel,
+                    isDark: isDark,
+                    axis: Axis.horizontal,
+                    thickness: 14,
+                    gradientMode: GradientMode.valueBased,
+                    optimalRangeOverride: optimalRangeOverride,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
           Expanded(
             child: Center( // Center the constrained heatmap within the available space
               child: LayoutBuilder(
@@ -60,7 +83,7 @@ class Heatmap2D extends StatelessWidget {
                       height: constraints.maxHeight,
                       child: CustomPaint(
                         painter: _HeatmapPainter(
-                            grid, showGridLines, isDark, metricLabel, minValue, maxValue),
+                            grid, showGridLines, isDark, metricLabel, minValue, maxValue, optimalRangeOverride),
                       ),
                     ),
                   );
@@ -68,19 +91,6 @@ class Heatmap2D extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 16),
-          SizedBox(
-            height: double.infinity,
-            width: 60,
-            child: HeatmapLegend(
-              minValue: minValue,
-              maxValue: maxValue,
-              metricLabel: metricLabel,
-              isDark: isDark,
-              axis: Axis.vertical,
-              gradientMode: GradientMode.valueBased
-            ),
-          )
         ],
       ),
     );
@@ -94,9 +104,10 @@ class _HeatmapPainter extends CustomPainter {
   final String metricLabel;
   final double minValue;
   final double maxValue;
+  final List<double>? optimalRangeOverride;
 
   _HeatmapPainter(this.grid, this.showGridLines, this.isDark,
-      this.metricLabel, this.minValue, this.maxValue);
+      this.metricLabel, this.minValue, this.maxValue, this.optimalRangeOverride);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -117,7 +128,8 @@ class _HeatmapPainter extends CustomPainter {
         final cellValue = grid[r][c];
         
         // Ensure you have access to the valueToColor function from heatmap_service.dart
-        paint.color = valueToColor(cellValue, minValue, maxValue, metricLabel);
+        paint.color = valueToColor(cellValue, minValue, maxValue, metricLabel,
+            optimalRangeOverride: optimalRangeOverride);
         
         final double x0 = c * cellWidth;
         final double y0 = r * cellHeight;
@@ -146,7 +158,8 @@ class _HeatmapPainter extends CustomPainter {
       old.isDark != isDark ||
       old.metricLabel != metricLabel ||
       old.minValue != minValue ||
-      old.maxValue != maxValue;
+      old.maxValue != maxValue ||
+      old.optimalRangeOverride != optimalRangeOverride;
 }
 
 // Render the heatmap to an offscreen image suitable for saving as PNG
@@ -157,6 +170,7 @@ Future<ui.Image> renderHeatmapImage({
   required double maxValue,
   int cellSize = 16,
   bool showGridLines = false,
+  List<double>? optimalRangeOverride,
 }) async {
   if (grid.isEmpty || grid[0].isEmpty) {
     // Create a tiny placeholder image
@@ -170,6 +184,7 @@ Future<ui.Image> renderHeatmapImage({
       metricLabel,
       minValue,
       maxValue,
+      optimalRangeOverride,
     );
     painter.paint(canvas, size);
     final picture = recorder.endRecording();
@@ -191,6 +206,7 @@ Future<ui.Image> renderHeatmapImage({
     metricLabel,
     minValue,
     maxValue,
+    optimalRangeOverride,
   );
   painter.paint(canvas, size);
   final picture = recorder.endRecording();
