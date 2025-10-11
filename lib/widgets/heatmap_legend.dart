@@ -21,22 +21,21 @@ class HeatmapLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final optimalRange = optimalRanges[metricLabel] ?? [minValue, maxValue];
-    final optimalMin = optimalRange[0];
-    final optimalMax = optimalRange[1];
+    // NOTE: The original optimalRange, blueStop, and redStop calculations
+    // are ignored to implement the fixed, symmetrical gradient as requested.
+    
+    // --- FIXED SYMMETRICAL GRADIENT LOGIC ---
+    // This ensures Green (the 'optimal' band) is always visible in the middle.
+    const double greenStart = 0.3; // Green starts at 30% of the bar
+    const double greenEnd = 0.7;   // Green ends at 70% of the bar (40% width)
 
-    final double range = (maxValue - minValue).abs() < 1e-12 ? 1.0 : (maxValue - minValue);
-
-    final blueStop = (optimalMin - minValue) / range;
-    final redStop = (optimalMax - minValue) / range;
-
+    // The gradient colors and stops are now fixed to provide a consistent visual.
     final stops = [
-      0.0,
-      blueStop.clamp(0.0, 1.0),
-      redStop.clamp(0.0, 1.0),
-      1.0
+      0.0,        // Start of Blue
+      greenStart, // Start of Green
+      greenEnd,   // End of Green
+      1.0         // End of Red
     ];
-    stops.sort();
 
     final gradientColors = [
       Colors.blue,
@@ -44,12 +43,17 @@ class HeatmapLegend extends StatelessWidget {
       Colors.green,
       Colors.red,
     ];
+    // ----------------------------------------
 
     if (axis == Axis.vertical) {
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.start, // Align title and bar/labels
         children: [
+          // FIX: Added maxLines and overflow to prevent the label from wrapping/overflowing
           Text(
             metricLabel,
+            maxLines: 1, 
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: isDark ? Colors.white70 : Colors.black87,
