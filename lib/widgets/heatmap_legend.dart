@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import '../services/heatmap_service.dart';
+// NOTE: Since the value-based stop logic was removed, 
+// the service import is technically not needed for the legend widget itself, 
+// but is kept here for completeness with the rest of your system.
+// import '../services/heatmap_service.dart'; 
 
 class HeatmapLegend extends StatelessWidget {
   final double minValue;
@@ -21,19 +24,17 @@ class HeatmapLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // NOTE: The original optimalRange, blueStop, and redStop calculations
-    // are ignored to implement the fixed, symmetrical gradient as requested.
-    
-    // --- FIXED SYMMETRICAL GRADIENT LOGIC ---
-    // This ensures Green (the 'optimal' band) is always visible in the middle.
-    const double greenStart = 0.3; // Green starts at 30% of the bar
-    const double greenEnd = 0.7;   // Green ends at 70% of the bar (40% width)
+    // ----------------------------------------------------------------------
+    // FIXED SYMMETRICAL GRADIENT LOGIC (To ensure full color range is visible)
+    // Blue (0.0) -> Green (0.3) | Green (0.7) -> Red (1.0)
+    // This provides a consistent, centered 40% Green band.
+    const double greenStart = 0.3;
+    const double greenEnd = 0.7;
 
-    // The gradient colors and stops are now fixed to provide a consistent visual.
     final stops = [
       0.0,        // Start of Blue
-      greenStart, // Start of Green
-      greenEnd,   // End of Green
+      greenStart, // Start of Green (Optimal Min)
+      greenEnd,   // End of Green (Optimal Max)
       1.0         // End of Red
     ];
 
@@ -43,7 +44,7 @@ class HeatmapLegend extends StatelessWidget {
       Colors.green,
       Colors.red,
     ];
-    // ----------------------------------------
+    // ----------------------------------------------------------------------
 
     if (axis == Axis.vertical) {
       return Column(
@@ -60,6 +61,8 @@ class HeatmapLegend extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
+          // NOTE: This Expanded will correctly fill the height provided by the parent
+          // SizedBox(height: double.infinity) in Heatmap2D.
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -102,6 +105,7 @@ class HeatmapLegend extends StatelessWidget {
         ],
       );
     } else {
+      // Horizontal axis implementation (using the same fixed gradient stops)
       return Row(
         children: [
           Text(
@@ -127,8 +131,10 @@ class HeatmapLegend extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
+          // FIX: Applying the ellipsis overflow property if the text wraps too much
           Text(
             maxValue.toStringAsFixed(2),
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 12),
           ),
         ],
