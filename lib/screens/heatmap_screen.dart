@@ -264,6 +264,15 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       return;
     }
 
+    // If nothing selected, show no data
+    if (selectedMetrics.isEmpty) {
+      setState(() {
+        gridData = [];
+        _optimalRangeOverride = null;
+      });
+      return;
+    }
+
     HeatmapGrid heatmapData;
     if (selectedMetrics.isNotEmpty && selectedMetrics.length > 1) {
       // Multi-select averaging
@@ -422,15 +431,10 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     setState(() {
       // Toggle selection in multi-select panel
       if (newMetric == 'All') {
-        // Select all base metrics
-        selectedMetrics = metrics.where((m) => m != 'All').toSet();
+        // handled by toggle button elsewhere
       } else {
         if (selectedMetrics.contains(newMetric)) {
           selectedMetrics.remove(newMetric);
-          if (selectedMetrics.isEmpty) {
-            // Keep at least one selected; fallback to this one
-            selectedMetrics = {newMetric};
-          }
         } else {
           selectedMetrics.add(newMetric);
         }
@@ -448,6 +452,48 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     } catch (_) {}
     _updateGridAndValues();
     // Try generating PNG for this metric in background
+    if (_lastKeySeed != null) {
+      unawaited(_ensurePngForCurrent(_lastKeySeed!, isRawKey: _lastKeyIsRaw));
+    }
+  }
+
+  bool get _areAllSelected => selectedMetrics.length == metrics.where((m) => m != 'All').length;
+
+  void _toggleSelectAll() {
+    setState(() {
+      if (_areAllSelected) {
+        // Deselect all -> show nothing
+        selectedMetrics.clear();
+      } else {
+        // Select all base metrics
+        selectedMetrics = metrics.where((m) => m != 'All').toSet();
+      }
+      currentMetric = selectedMetrics.length == 1 ? selectedMetrics.first : 'All';
+      if (is3DView) {
+        _modelViewerKey = UniqueKey();
+      }
+    });
+    try {
+      context.read<AppSettings>().setSelectedMetrics(selectedMetrics);
+    } catch (_) {}
+    _updateGridAndValues();
+    if (_lastKeySeed != null) {
+      unawaited(_ensurePngForCurrent(_lastKeySeed!, isRawKey: _lastKeyIsRaw));
+    }
+  }
+
+  void _onMetricLongPress(String metric) {
+    setState(() {
+      selectedMetrics = {metric};
+      currentMetric = metric;
+      if (is3DView) {
+        _modelViewerKey = UniqueKey();
+      }
+    });
+    try {
+      context.read<AppSettings>().setSelectedMetrics(selectedMetrics);
+    } catch (_) {}
+    _updateGridAndValues();
     if (_lastKeySeed != null) {
       unawaited(_ensurePngForCurrent(_lastKeySeed!, isRawKey: _lastKeyIsRaw));
     }
@@ -569,92 +615,64 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  if (is3DView && (gridData != null && gridData!.isNotEmpty))
+                  const SizedBox(height: 12),
+                  // Metrics row (top) with toggle button
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        ...metrics
+                            .where((m) => m != 'All')
+                            .map((m) => Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: GestureDetector(
+                                    onLongPress: () => _onMetricLongPress(m),
+                                    child: FilterChip(
+                                      label: Text(m),
+                                      selected: selectedMetrics.contains(m),
+                                      onSelected: (_) => _onMetricChanged(m),
+                                    ),
+                                  ),
+                                ))
+                            .toList(),
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          icon: Icon(_areAllSelected ? Icons.clear_all : Icons.select_all),
+                          onPressed: _toggleSelectAll,
+                          label: Text(_areAllSelected ? 'Clear All' : 'Select All'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (gridData != null && gridData!.isNotEmpty)
                     SizedBox(
                       height: 36,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: HeatmapLegend(
-                              minValue: minValue,
-                              maxValue: maxValue,
-                              metricLabel: selectedMetrics.length == 1 ? selectedMetrics.first : 'Average',
-                              isDark: isDark,
-                              axis: Axis.horizontal,
-                              thickness: 14,
-                              gradientMode: GradientMode.valueBased,
-                              optimalRangeOverride: _optimalRangeOverride,
-                            ),
-                          )
-                        ],
+                      child: HeatmapLegend(
+                        minValue: minValue,
+                        maxValue: maxValue,
+                        metricLabel: selectedMetrics.length == 1 ? selectedMetrics.first : 'Average',
+                        isDark: isDark,
+                        axis: Axis.horizontal,
+                        thickness: 14,
+                        gradientMode: GradientMode.valueBased,
+                        optimalRangeOverride: _optimalRangeOverride,
                       ),
                     ),
-                  if (is3DView && (gridData != null && gridData!.isNotEmpty))
+                  if (gridData != null && gridData!.isNotEmpty)
                     const SizedBox(height: 8),
                   Expanded(
                     child: (gridData != null && gridData!.isNotEmpty)
-                        ? Row(
-                            children: [
-                              // Sidebar with multi-select chips
-                              SizedBox(
-                                width: 180,
-                                child: SingleChildScrollView(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        direction: Axis.horizontal,
-                                        children: metrics
-                                            .where((m) => m != 'All')
-                                            .map((m) => FilterChip(
-                                                  label: Text(m),
-                                                  selected: selectedMetrics.contains(m),
-                                                  onSelected: (_) => _onMetricChanged(m),
-                                                ))
-                                            .toList(),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          TextButton.icon(
-                                            icon: const Icon(Icons.select_all),
-                                            onPressed: () => _onMetricChanged('All'),
-                                            label: const Text('Select All'),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          TextButton.icon(
-                                            icon: const Icon(Icons.clear_all),
-                                            onPressed: () {
-                                              if (metrics.isNotEmpty) {
-                                                _onMetricChanged(metrics.firstWhere((m) => m != 'All'));
-                                              }
-                                            },
-                                            label: const Text('Clear All'),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: is3DView
-                                    ? _buildTexturedPlaneViewer()
-                                    : Heatmap2D(
-                                        grid: gridData!,
-                                        geographicWidthRatio: geographicWidthRatio,
-                                        metricLabel: selectedMetrics.length == 1 ? selectedMetrics.first : 'Average',
-                                        minValue: minValue,
-                                        maxValue: maxValue,
-                                        optimalRangeOverride: _optimalRangeOverride,
-                                      ),
-                              ),
-                            ],
-                          )
+                        ? (is3DView
+                            ? _buildTexturedPlaneViewer()
+                            : Heatmap2D(
+                                grid: gridData!,
+                                geographicWidthRatio: geographicWidthRatio,
+                                metricLabel: selectedMetrics.length == 1 ? selectedMetrics.first : 'Average',
+                                minValue: minValue,
+                                maxValue: maxValue,
+                                optimalRangeOverride: _optimalRangeOverride,
+                              ))
                         : const Center(
                             child: Text("No data to display for the selected metric and time range."),
                           ),
