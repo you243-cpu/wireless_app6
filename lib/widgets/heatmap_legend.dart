@@ -1,8 +1,22 @@
 import 'package:flutter/material.dart';
-// NOTE: Since the value-based stop logic was removed, 
-// the service import is technically not needed for the legend widget itself, 
-// but is kept here for completeness with the rest of your system.
-import '../services/heatmap_service.dart'; 
+
+// 1. Define the enum to switch between gradient calculation modes
+enum GradientMode {
+  /// Proportional, where the stops are fixed (0.3 and 0.7) to guarantee
+  /// a visible green band, regardless of data distribution.
+  fixed,
+
+  /// Value-based, where the stops are calculated based on the metric's
+  /// optimal range relative to the min/max values. (Data accurate, but
+  /// green band might be invisible if optimal range is narrow).
+  valueBased,
+}
+
+// Mock definition for optimalRanges, needed only for the valueBased mode to compile
+// If your actual heatmap_service.dart defines this, remove this mock.
+const Map<String, List<double>> optimalRangesMock = {
+  'Temperature': [20.0, 24.0], // Example range
+};
 
 class HeatmapLegend extends StatelessWidget {
   final double minValue;
@@ -11,6 +25,7 @@ class HeatmapLegend extends StatelessWidget {
   final bool isDark;
   final Axis axis;
   final double thickness;
+  final GradientMode gradientMode; // New property to select the mode
 
   const HeatmapLegend({
     super.key,
@@ -20,23 +35,47 @@ class HeatmapLegend extends StatelessWidget {
     this.isDark = false,
     this.axis = Axis.vertical,
     this.thickness = 20,
+    this.gradientMode = GradientMode.fixed, // Default to the working fixed mode
   });
 
   @override
   Widget build(BuildContext context) {
-    // ----------------------------------------------------------------------
-    // FIXED SYMMETRICAL GRADIENT LOGIC (To ensure full color range is visible)
-    // Blue (0.0) -> Green (0.3) | Green (0.7) -> Red (1.0)
-    // This provides a consistent, centered 40% Green band.
-    const double greenStart = 0.3;
-    const double greenEnd = 0.7;
+    final List<double> stops;
+    
+    // --- Gradient Calculation based on Mode ---
+    if (gradientMode == GradientMode.fixed) {
+      // MODE 1: Fixed Symmetrical Gradient (Visual Reliability)
+      const double greenStart = 0.3;
+      const double greenEnd = 0.7;
+      
+      stops = [
+        0.0,        // Start of Blue
+        greenStart, // Start of Green
+        greenEnd,   // End of Green
+        1.0         // End of Red
+      ];
+    } else {
+      // MODE 2: Value-Based Proportional Gradient (Data Accuracy)
+      // NOTE: This uses the mock data above; replace optimalRangesMock with 
+      // the actual import if needed, or pass optimalRange data explicitly.
+      final optimalRange = optimalRangesMock[metricLabel] ?? [minValue, maxValue];
+      final optimalMin = optimalRange[0];
+      final optimalMax = optimalRange[1];
 
-    final stops = [
-      0.0,        // Start of Blue
-      greenStart, // Start of Green (Optimal Min)
-      greenEnd,   // End of Green (Optimal Max)
-      1.0         // End of Red
-    ];
+      final double range = (maxValue - minValue).abs() < 1e-12 ? 1.0 : (maxValue - minValue);
+
+      final blueStop = (optimalMin - minValue) / range;
+      final redStop = (optimalMax - minValue) / range;
+
+      stops = [
+        0.0,
+        blueStop.clamp(0.0, 1.0),
+        redStop.clamp(0.0, 1.0),
+        1.0
+      ];
+      stops.sort();
+    }
+    // ----------------------------------------
 
     final gradientColors = [
       Colors.blue,
@@ -44,13 +83,12 @@ class HeatmapLegend extends StatelessWidget {
       Colors.green,
       Colors.red,
     ];
-    // ----------------------------------------------------------------------
 
     if (axis == Axis.vertical) {
       return Column(
-        crossAxisAlignment: CrossAxisAlignment.start, // Align title and bar/labels
+        crossAxisAlignment: CrossAxisAlignment.start, 
         children: [
-          // FIX: Added maxLines and overflow to prevent the label from wrapping/overflowing
+          // FIX: Label overflow handling
           Text(
             metricLabel,
             maxLines: 1, 
@@ -61,8 +99,6 @@ class HeatmapLegend extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          // NOTE: This Expanded will correctly fill the height provided by the parent
-          // SizedBox(height: double.infinity) in Heatmap2D.
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -105,7 +141,6 @@ class HeatmapLegend extends StatelessWidget {
         ],
       );
     } else {
-      // Horizontal axis implementation (using the same fixed gradient stops)
       return Row(
         children: [
           Text(
@@ -131,10 +166,8 @@ class HeatmapLegend extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          // FIX: Applying the ellipsis overflow property if the text wraps too much
           Text(
             maxValue.toStringAsFixed(2),
-            overflow: TextOverflow.ellipsis,
             style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 12),
           ),
         ],
