@@ -16,6 +16,8 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/app_settings.dart';
 import '../providers/csv_data_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 class HeatmapScreen extends StatefulWidget {
   const HeatmapScreen({super.key});
@@ -293,8 +295,8 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
           ? keySeed
           : await DefaultAssetBundle.of(context).loadString(keySeed);
       final key = HeatmapCacheService.buildKey(csvContent: seed, metric: currentMetric);
-      final settings = context.read<AppSettings>();
-      final exists = await HeatmapCacheService.existsPng(key, basePath: settings.saveDirectory);
+      // Use app documents for cached assets to avoid permission issues
+      final exists = await HeatmapCacheService.existsPng(key, basePath: null);
       if (!exists) {
         final img = await renderHeatmapImage(
           grid: gridData!,
@@ -303,7 +305,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
           maxValue: maxValue,
           cellSize: 24,
         );
-        await HeatmapCacheService.writePng(key, img, basePath: settings.saveDirectory);
+        await HeatmapCacheService.writePng(key, img, basePath: null);
       }
     } catch (_) {
       // Ignore caching errors silently for now
@@ -347,8 +349,8 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       seed = await DefaultAssetBundle.of(context).loadString('assets/simulated_soil_square.csv');
     }
     final key = HeatmapCacheService.buildKey(csvContent: seed, metric: currentMetric);
-    final settings = context.read<AppSettings>();
-    if (!await HeatmapCacheService.existsPng(key, basePath: settings.saveDirectory)) {
+    // Keep cache internal to app storage to avoid permission issues
+    if (!await HeatmapCacheService.existsPng(key, basePath: null)) {
       if (gridData != null && gridData!.isNotEmpty) {
         final img = await renderHeatmapImage(
           grid: gridData!,
@@ -357,11 +359,11 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
           maxValue: maxValue,
           cellSize: 24,
         );
-        await HeatmapCacheService.writePng(key, img, basePath: settings.saveDirectory);
+        await HeatmapCacheService.writePng(key, img, basePath: null);
       }
     }
     // Read PNG and embed in glTF JSON (data URIs)
-    final pngFile = await HeatmapCacheService.getPngFile(key, basePath: settings.saveDirectory);
+    final pngFile = await HeatmapCacheService.getPngFile(key, basePath: null);
     final bytes = await pngFile.readAsBytes();
     final json = GltfService.buildTexturedPlaneGltfJson(bytes);
     return GltfService.gltfJsonToDataUri(json);
@@ -432,6 +434,20 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
 
     // In this app we render 3D with a custom painter instead of glTF assets
     gltfModelPath = null;
+  }
+
+  Future<bool> _ensureStoragePermission() async {
+    final androidInfo = await DeviceInfoPlugin().androidInfo;
+    final sdk = androidInfo.version.sdkInt;
+    if (sdk >= 30) {
+      if (await Permission.manageExternalStorage.isGranted) return true;
+      final status = await Permission.manageExternalStorage.request();
+      return status.isGranted;
+    } else {
+      if (await Permission.storage.isGranted) return true;
+      final status = await Permission.storage.request();
+      return status.isGranted;
+    }
   }
 
   void _reset3DView() {
@@ -540,6 +556,15 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                       label: const Text('Export heatmap PNG'),
                       onPressed: () async {
                         try {
+                          // Ask for external storage permission when exporting
+                          final granted = await _ensureStoragePermission();
+                          if (!granted) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Storage permission denied. Saving to app storage instead.')),
+                              );
+                            }
+                          }
                           final img = await renderHeatmapImage(
                             grid: gridData!,
                             metricLabel: currentMetric,
