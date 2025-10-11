@@ -253,6 +253,56 @@ class HeatmapService {
     return grid;
   }
 
+  // Create a grid from the data points for a set of metrics (per-cell averaged)
+  List<List<double>> createGridForMetrics({
+    required List<String> metrics,
+    required DateTime start,
+    required DateTime end,
+  }) {
+    if (points.isEmpty) {
+      return [
+        [double.nan]
+      ];
+    }
+
+    final filteredPoints = points.where((p) =>
+        (p.t.isAfter(start) || p.t.isAtSameMomentAs(start)) &&
+        (p.t.isBefore(end) || p.t.isAtSameMomentAs(end))).toList();
+
+    if (filteredPoints.isEmpty) {
+      return [
+        [double.nan]
+      ];
+    }
+
+    final maxX = filteredPoints.map((p) => p.x).reduce(max);
+    final maxY = filteredPoints.map((p) => p.y).reduce(max);
+
+    final grid = List.generate(maxY + 1, (i) => List.filled(maxX + 1, double.nan));
+
+    final Map<String, List<double>> combinedValues = {};
+    for (var p in filteredPoints) {
+      final key = '${p.x}_${p.y}';
+      if (!combinedValues.containsKey(key)) {
+        combinedValues[key] = [];
+      }
+      final v = _metricValueForList(p, metrics);
+      if (v.isFinite) combinedValues[key]!.add(v);
+    }
+
+    for (var entry in combinedValues.entries) {
+      final parts = entry.key.split('_');
+      final x = int.parse(parts[0]);
+      final y = int.parse(parts[1]);
+      if (entry.value.isNotEmpty) {
+        final avgValue = entry.value.reduce((a, b) => a + b) / entry.value.length;
+        grid[y][x] = avgValue;
+      }
+    }
+
+    return grid;
+  }
+
   // Build a uniform, seamless grid using lat/lon by Inverse Distance Weighting (IDW) interpolation
   HeatmapGrid createUniformGridFromLatLon({
     required String metric,
@@ -358,6 +408,111 @@ class HeatmapService {
     return HeatmapGrid(grid: grid, widthRatio: ratio);
   }
 
+  // Build a uniform, seamless grid using lat/lon and averaging across selected metrics
+  HeatmapGrid createUniformGridFromLatLonForMetrics({
+    required List<String> metrics,
+    required DateTime start,
+    required DateTime end,
+    int? targetCols,
+    int? targetRows,
+  }) {
+    if (points.isEmpty) {
+      return HeatmapGrid(grid: [[double.nan]], widthRatio: 1.0);
+    }
+
+    final candidates = points.where((p) =>
+        p.lat != null &&
+        p.lon != null &&
+        (p.t.isAfter(start) || p.t.isAtSameMomentAs(start)) &&
+        (p.t.isBefore(end) || p.t.isAtSameMomentAs(end))).toList();
+
+    if (candidates.isEmpty) {
+      // Fallback to index-based grid with a square ratio
+      final fallbackGrid = createGridForMetrics(metrics: metrics, start: start, end: end);
+      return HeatmapGrid(grid: fallbackGrid, widthRatio: 1.0);
+    }
+
+    // Determine resolution
+    final uniqueLats = candidates.map((p) => p.lat!).toSet().toList()..sort();
+    final uniqueLons = candidates.map((p) => p.lon!).toSet().toList()..sort();
+
+    // Enforce a minimum and maximum visual resolution
+    final int minResolution = 32;
+    final int maxResolution = 128;
+
+    final int cols = targetCols ?? max(minResolution, min(maxResolution, uniqueLons.length * 4));
+    final int rows = targetRows ?? max(minResolution, min(maxResolution, uniqueLats.length * 4));
+
+    if (cols <= 0 || rows <= 0) {
+      return HeatmapGrid(grid: [[double.nan]], widthRatio: 1.0);
+    }
+
+    final double minLat = uniqueLats.first;
+    final double maxLat = uniqueLats.last;
+    final double minLon = uniqueLons.first;
+    final double maxLon = uniqueLons.last;
+
+    // Calculate Aspect Ratio: Delta Lon / Delta Lat
+    final double deltaLat = maxLat - minLat;
+    final double deltaLon = maxLon - minLon;
+    final double ratio = (deltaLat.abs() < 1e-6 || !deltaLat.isFinite) ? 1.0 : deltaLon / deltaLat;
+
+    // Precompute candidate values and positions
+    final List<_Sample> samples = [];
+    for (final p in candidates) {
+      final value = _metricValueForList(p, metrics);
+      if (value.isFinite) {
+        samples.add(_Sample(p.lat!, p.lon!, value));
+      }
+    }
+    if (samples.isEmpty) {
+      return HeatmapGrid(grid: [[double.nan]], widthRatio: 1.0);
+    }
+
+    // Axis arrays (inclusive endpoints)
+    List<double> latAxis = List.generate(rows, (r) => rows == 1 ? minLat : minLat + (maxLat - minLat) * r / (rows - 1));
+    List<double> lonAxis = List.generate(cols, (c) => cols == 1 ? minLon : minLon + (maxLon - minLon) * c / (cols - 1));
+
+    // Fill grid using Inverse Distance Weighting (IDW) interpolation
+    final grid = List.generate(rows, (_) => List.filled(cols, double.nan));
+
+    const double p = 2.0; // Power parameter (Inverse Square Distance)
+    const double epsilon = 1e-12; // Small value to prevent division by zero
+
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < cols; c++) {
+        final lat = latAxis[r];
+        final lon = lonAxis[c];
+
+        double weightedSum = 0.0;
+        double weightSum = 0.0;
+
+        for (final s in samples) {
+          // Calculate Euclidean distance squared (approximation)
+          final double dLat = s.lat - lat;
+          final double dLon = s.lon - lon;
+          final double dist2 = dLat * dLat + dLon * dLon;
+
+          final double dist = sqrt(dist2);
+
+          // Weight calculation: 1 / (distance^p + epsilon)
+          final double weight = 1.0 / (pow(dist, p) + epsilon);
+
+          weightedSum += s.value * weight;
+          weightSum += weight;
+        }
+
+        if (weightSum > 0) {
+          grid[r][c] = weightedSum / weightSum;
+        } else {
+          grid[r][c] = double.nan;
+        }
+      }
+    }
+
+    return HeatmapGrid(grid: grid, widthRatio: ratio);
+  }
+
   double _metricValue(HeatmapPoint p, String metric) {
     if (metric == 'All') {
       final values = p.metrics.values.where((v) => v.isFinite).toList();
@@ -365,6 +520,37 @@ class HeatmapService {
       return values.reduce((a, b) => a + b) / values.length;
     }
     return p.metrics[metric] ?? double.nan;
+  }
+
+  // Average value across a specific list of metrics for a point
+  double _metricValueForList(HeatmapPoint p, List<String> metrics) {
+    final values = <double>[];
+    for (final m in metrics) {
+      final v = p.metrics[m];
+      if (v != null && v.isFinite) values.add(v);
+    }
+    if (values.isEmpty) return double.nan;
+    return values.reduce((a, b) => a + b) / values.length;
+  }
+
+  // Compute an average optimal range across a set of metrics
+  List<double> averageOptimalRange(List<String> metrics) {
+    final mins = <double>[];
+    final maxs = <double>[];
+    for (final m in metrics) {
+      final r = optimalRanges[m];
+      if (r != null && r.length >= 2) {
+        mins.add(r[0]);
+        maxs.add(r[1]);
+      }
+    }
+    if (mins.isEmpty || maxs.isEmpty) {
+      // Fallback
+      return [0.0, 1.0];
+    }
+    final avgMin = mins.reduce((a, b) => a + b) / mins.length;
+    final avgMax = maxs.reduce((a, b) => a + b) / maxs.length;
+    return [avgMin, avgMax];
   }
 
 }
@@ -400,7 +586,13 @@ final Map<String, List<double>> optimalRanges = {
 };
 
 // Converts a value to a color based on the optimal range for the metric
-Color valueToColor(double value, double minValue, double maxValue, String metric) {
+Color valueToColor(
+  double value,
+  double minValue,
+  double maxValue,
+  String metric, {
+  List<double>? optimalRangeOverride,
+}) {
   if (value.isNaN) {
     return Colors.black.withOpacity(0.1);
   }
@@ -413,7 +605,7 @@ Color valueToColor(double value, double minValue, double maxValue, String metric
     return Colors.green;
   }
 
-  final optimalRange = optimalRanges[metric] ?? [minValue, maxValue];
+  final optimalRange = optimalRangeOverride ?? optimalRanges[metric] ?? [minValue, maxValue];
   final optimalMin = optimalRange[0];
   final optimalMax = optimalRange[1];
 
