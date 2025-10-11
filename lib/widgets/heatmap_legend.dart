@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 // NOTE: Since the value-based stop logic was removed, 
 // the service import is technically not needed for the legend widget itself, 
 // but is kept here for completeness with the rest of your system.
-// import '../services/heatmap_service.dart'; 
+import '../services/heatmap_service.dart'; 
 
 class HeatmapLegend extends StatelessWidget {
   final double minValue;
