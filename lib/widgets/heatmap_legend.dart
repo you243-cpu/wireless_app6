@@ -23,6 +23,7 @@ class HeatmapLegend extends StatelessWidget {
   final Axis axis;
   final double thickness;
   final GradientMode gradientMode; // New property to select the mode
+  final List<double>? optimalRangeOverride; // Optional override for optimal range when combining metrics
 
   const HeatmapLegend({
     super.key,
@@ -33,6 +34,7 @@ class HeatmapLegend extends StatelessWidget {
     this.axis = Axis.vertical,
     this.thickness = 20,
     this.gradientMode = GradientMode.fixed, // Default to the working fixed mode
+    this.optimalRangeOverride,
   });
 
   @override
@@ -53,8 +55,8 @@ class HeatmapLegend extends StatelessWidget {
       ];
     } else {
       // MODE 2: Value-Based Proportional Gradient (Data Accuracy)
-      // Now using the imported `optimalRanges` map from heatmap_service.dart
-      final optimalRange = optimalRanges[metricLabel] ?? [minValue, maxValue];
+      // Use override if provided, else fall back to `optimalRanges` map from heatmap_service.dart
+      final optimalRange = optimalRangeOverride ?? (optimalRanges[metricLabel] ?? [minValue, maxValue]);
       final optimalMin = optimalRange[0];
       final optimalMax = optimalRange[1];
 
