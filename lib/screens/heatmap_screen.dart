@@ -246,6 +246,13 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     final isPlantStatus = _selectedValues!.keys.length == 1 && _selectedValues!.keys.first == 'Plant Status';
     final List<Widget> chips = [];
     if (isPlantStatus) {
+      // Always show indices and coordinates first
+      chips.add(_InfoChip(label: _selectedRow != null && _selectedCol != null ? "r=${_selectedRow}, c=${_selectedCol}" : "r=?, c=?"));
+      if (_selectedLat != null && _selectedLon != null) {
+        chips.add(_InfoChip(label: "lat ${_selectedLat!.toStringAsFixed(5)}"));
+        chips.add(_InfoChip(label: "lon ${_selectedLon!.toStringAsFixed(5)}"));
+      }
+      // Then the human-readable Plant Status
       final v = _selectedValues!['Plant Status'] ?? double.nan;
       final code = v.isNaN ? 0 : v.round();
       final label = labelForPlantStatusCode(code);
