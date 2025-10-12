@@ -70,10 +70,10 @@ class Heatmap2D extends StatelessWidget {
                         final int rows = grid.length;
                         final int cols = grid[0].length;
                         // Reserve margins for axes when indices are shown
-                        final double leftMargin = showIndices ? 28.0 : 0.0;
-                        final double topMargin = showIndices ? 18.0 : 0.0;
-                        final double rightMargin = showIndices ? 6.0 : 0.0;
-                        final double bottomMargin = showIndices ? 6.0 : 0.0;
+                        final double leftMargin = showIndices ? 20.0 : 0.0;
+                        final double topMargin = showIndices ? 12.0 : 0.0;
+                        final double rightMargin = showIndices ? 4.0 : 0.0;
+                        final double bottomMargin = showIndices ? 8.0 : 0.0;
                         final double drawWidth = size.width - leftMargin - rightMargin;
                         final double drawHeight = size.height - topMargin - bottomMargin;
                         final double cellWidth = drawWidth / cols;
@@ -137,10 +137,10 @@ class _HeatmapPainter extends CustomPainter {
     final cols = grid[0].length;
     final paint = Paint()..isAntiAlias = false; // Avoid hairline seams between cells
     // Margins for axes when indices enabled
-    final double leftMargin = showIndices ? 28.0 : 0.0;
-    final double topMargin = showIndices ? 18.0 : 0.0;
-    final double rightMargin = showIndices ? 6.0 : 0.0;
-    final double bottomMargin = showIndices ? 6.0 : 0.0;
+    final double leftMargin = showIndices ? 20.0 : 0.0;
+    final double topMargin = showIndices ? 12.0 : 0.0;
+    final double rightMargin = showIndices ? 4.0 : 0.0;
+    final double bottomMargin = showIndices ? 8.0 : 0.0;
     final double drawWidth = size.width - leftMargin - rightMargin;
     final double drawHeight = size.height - topMargin - bottomMargin;
     final cellWidth = drawWidth / cols;
@@ -158,8 +158,8 @@ class _HeatmapPainter extends CustomPainter {
         final double y0 = topMargin + r * cellHeight;
         
         // Simplified and safer boundary calculation using fromLTRB
-        final double x1 = (c + 1) * cellWidth; 
-        final double y1 = (r + 1) * cellHeight;
+        final double x1 = leftMargin + (c + 1) * cellWidth; 
+        final double y1 = topMargin + (r + 1) * cellHeight;
         
         final rect = Rect.fromLTRB(x0, y0, x1, y1); 
         
@@ -192,12 +192,9 @@ class _HeatmapPainter extends CustomPainter {
     // Draw axis indices along top (columns) and left (rows)
     if (showIndices) {
       final textStyle = TextStyle(
-        color: isDark ? Colors.white70 : Colors.black87,
-        fontSize: 10,
+        color: isDark ? Colors.white60 : Colors.black87,
+        fontSize: 8,
       );
-      final bgPaint = Paint()
-        ..color = (isDark ? Colors.black : Colors.white).withOpacity(0.6)
-        ..style = PaintingStyle.fill;
       // Columns labels above top edge
       for (int c = 0; c < cols; c++) {
         final tp = TextPainter(
@@ -206,8 +203,6 @@ class _HeatmapPainter extends CustomPainter {
         )..layout();
         final dx = leftMargin + c * cellWidth + cellWidth * 0.5 - tp.width / 2;
         final double ty = topMargin - tp.height - 2;
-        final rect = Rect.fromLTWH(dx - 2, ty - 1, tp.width + 4, tp.height + 2);
-        canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), bgPaint);
         tp.paint(canvas, Offset(dx, ty));
       }
       // Rows labels left of left edge
@@ -218,8 +213,6 @@ class _HeatmapPainter extends CustomPainter {
         )..layout();
         final double dy = topMargin + r * cellHeight + cellHeight * 0.5 - tp.height / 2;
         final double lx = leftMargin - tp.width - 4;
-        final rect = Rect.fromLTWH(lx - 2, dy - 1, tp.width + 4, tp.height + 2);
-        canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), bgPaint);
         tp.paint(canvas, Offset(lx, dy));
       }
     }
