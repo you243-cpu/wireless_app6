@@ -5,8 +5,9 @@ class PlantStatusLegend extends StatelessWidget {
   final Axis axis;
   final double spacing;
   final bool isDense;
+  final bool numericOnly;
 
-  const PlantStatusLegend({super.key, this.axis = Axis.horizontal, this.spacing = 8.0, this.isDense = true});
+  const PlantStatusLegend({super.key, this.axis = Axis.horizontal, this.spacing = 8.0, this.isDense = true, this.numericOnly = false});
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +17,7 @@ class PlantStatusLegend extends StatelessWidget {
     if (axis == Axis.vertical) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: items.map((item) => _LegendItem(item: item, textStyle: textStyle, isDense: isDense)).toList(),
+        children: items.map((item) => _LegendItem(item: item, textStyle: textStyle, isDense: isDense, labelOverride: numericOnly ? item.code.toString() : null)).toList(),
       );
     }
 
@@ -26,7 +27,7 @@ class PlantStatusLegend extends StatelessWidget {
         children: items
             .map((item) => Padding(
                   padding: EdgeInsets.only(right: spacing),
-                  child: _LegendChip(item: item, dense: true),
+                  child: _LegendChip(item: item, dense: true, labelOverride: numericOnly ? item.code.toString() : null),
                 ))
             .toList(),
       ),
@@ -38,8 +39,9 @@ class _LegendItem extends StatelessWidget {
   final PlantStatusCategoryItem item;
   final TextStyle? textStyle;
   final bool isDense;
+  final String? labelOverride;
 
-  const _LegendItem({required this.item, required this.textStyle, required this.isDense});
+  const _LegendItem({required this.item, required this.textStyle, required this.isDense, this.labelOverride});
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +50,7 @@ class _LegendItem extends StatelessWidget {
       children: [
         Container(width: isDense ? 12 : 16, height: isDense ? 12 : 16, decoration: BoxDecoration(color: item.color, shape: BoxShape.circle)),
         const SizedBox(width: 6),
-        Text(item.label, style: textStyle),
+        Text(labelOverride ?? item.label, style: textStyle),
       ],
     );
   }
@@ -57,7 +59,8 @@ class _LegendItem extends StatelessWidget {
 class _LegendChip extends StatelessWidget {
   final PlantStatusCategoryItem item;
   final bool dense;
-  const _LegendChip({required this.item, this.dense = false});
+  final String? labelOverride;
+  const _LegendChip({required this.item, this.dense = false, this.labelOverride});
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +81,7 @@ class _LegendChip extends StatelessWidget {
         children: [
           Container(width: dense ? 8 : 10, height: dense ? 8 : 10, decoration: BoxDecoration(color: item.color, shape: BoxShape.circle)),
           SizedBox(width: dense ? 4 : 6),
-          Text(item.label, style: Theme.of(context).textTheme.bodySmall),
+          Text(labelOverride ?? item.label, style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
     );
