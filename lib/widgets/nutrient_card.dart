@@ -14,6 +14,7 @@ class NutrientCard extends StatelessWidget {
     this.plantStatus,
   });
 
+  
   @override
   Widget build(BuildContext context) {
     return Card(
