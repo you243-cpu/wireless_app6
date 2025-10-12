@@ -798,12 +798,6 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                     }),
                   if (gridData != null && gridData!.isNotEmpty)
                     const SizedBox(height: 8),
-                  // Selected cell info directly below the heatmap (compact card)
-                  if (_selectedValues != null) ...[
-                    const SizedBox(height: 8),
-                    _buildSelectionInfo(),
-                  ],
-                  const SizedBox(height: 8),
                   Expanded(
                     child: (gridData != null && gridData!.isNotEmpty)
                         ? (is3DView
@@ -847,7 +841,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                           ),
                   ),
                   if (_selectedValues != null) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     _buildSelectionInfo(),
                   ],
                   const SizedBox(height: 12),
