@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/heatmap_service.dart'; // Ensure this import path is correct
 
+// Outline thickness for each heatmap cell (in logical pixels)
+const double kCellOutlineWidth = 2.0;
+
 class Heatmap2D extends StatelessWidget {
   final List<List<double>> grid;
   final double geographicWidthRatio; // Ratio (Delta Lon / Delta Lat) for aspect correction
@@ -165,13 +168,12 @@ class _HeatmapPainter extends CustomPainter {
         
         canvas.drawRect(rect, paint);
 
-        if (showGridLines) {
-          final border = Paint()
-            ..color = Colors.white.withOpacity(0.35)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 0.8;
-          canvas.drawRect(rect, border);
-        }
+    // Always draw per-cell outline to make each square distinguishable
+    final border = Paint()
+      ..color = isDark ? Colors.white : Colors.black87
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = kCellOutlineWidth;
+    canvas.drawRect(rect, border);
       }
     }
 
