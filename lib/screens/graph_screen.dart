@@ -146,7 +146,7 @@ class _GraphScreenState extends State<GraphScreen> {
                         Column(
                           children: [
                             const SizedBox(height: 8),
-                            const PlantStatusLegend(axis: Axis.horizontal, isDense: true),
+                            const PlantStatusLegend(axis: Axis.horizontal, isDense: true, numericOnly: true),
                             Expanded(
                               child: LineChartWidget(
                                 data: List<double>.generate(
@@ -156,7 +156,7 @@ class _GraphScreenState extends State<GraphScreen> {
                                       : 0.0,
                                 ),
                                 color: Colors.teal,
-                                label: "Plant Status (code)",
+                                label: "Symptom Count",
                                 timestamps: provider.timestamps,
                                 zoomLevel: zoomLevel,
                                 scrollIndex: scrollIndex,
