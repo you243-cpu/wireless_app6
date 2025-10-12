@@ -24,7 +24,7 @@ class PlantStatusLegend extends StatelessWidget {
       spacing: spacing,
       runSpacing: spacing / 2,
       crossAxisAlignment: WrapCrossAlignment.center,
-      children: items.map((item) => _LegendItem(item: item, textStyle: textStyle, isDense: isDense)).toList(),
+      children: items.map((item) => _LegendChip(item: item)).toList(),
     );
   }
 }
@@ -45,6 +45,36 @@ class _LegendItem extends StatelessWidget {
         const SizedBox(width: 6),
         Text(item.label, style: textStyle),
       ],
+    );
+  }
+}
+
+class _LegendChip extends StatelessWidget {
+  final PlantStatusCategoryItem item;
+  const _LegendChip({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      margin: const EdgeInsets.only(right: 4, bottom: 4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A1C1F) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: item.color, width: 1.5),
+        boxShadow: [
+          BoxShadow(color: item.color.withOpacity(0.15), blurRadius: 6, spreadRadius: 1, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 10, height: 10, decoration: BoxDecoration(color: item.color, shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Text(item.label, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
     );
   }
 }
