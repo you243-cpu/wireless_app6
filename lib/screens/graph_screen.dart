@@ -146,7 +146,7 @@ class _GraphScreenState extends State<GraphScreen> {
                         Column(
                           children: [
                             const SizedBox(height: 8),
-                            const PlantStatusLegend(axis: Axis.horizontal, isDense: true, numericOnly: true),
+                            const PlantStatusLegend(axis: Axis.horizontal, isDense: true, numericOnly: false),
                             Expanded(
                               child: LineChartWidget(
                                 data: List<double>.generate(
@@ -156,7 +156,7 @@ class _GraphScreenState extends State<GraphScreen> {
                                       : 0.0,
                                 ),
                                 color: Colors.teal,
-                                label: "Symptom Count",
+                                label: "Plant Status (count or No Turmeric)",
                                 timestamps: provider.timestamps,
                                 zoomLevel: zoomLevel,
                                 scrollIndex: scrollIndex,
