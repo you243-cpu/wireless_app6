@@ -10,6 +10,8 @@ class HeatmapSurface3D extends StatefulWidget {
   final List<double>? optimalRangeOverride;
   final bool showIndices;
   final void Function(int row, int col)? onCellTap;
+  final int? highlightRow;
+  final int? highlightCol;
 
   const HeatmapSurface3D({
     super.key,
@@ -20,6 +22,8 @@ class HeatmapSurface3D extends StatefulWidget {
     this.optimalRangeOverride,
     this.showIndices = false,
     this.onCellTap,
+    this.highlightRow,
+    this.highlightCol,
   });
 
   @override
@@ -98,6 +102,8 @@ class _HeatmapSurface3DState extends State<HeatmapSurface3D> {
               zoom: _zoom,
               optimalRangeOverride: widget.optimalRangeOverride,
               showIndices: widget.showIndices,
+              highlightRow: widget.highlightRow,
+              highlightCol: widget.highlightCol,
             ),
           ),
         );
@@ -117,6 +123,8 @@ class _SurfacePainter extends CustomPainter {
   final double zoom;
   final List<double>? optimalRangeOverride;
   final bool showIndices;
+  final int? highlightRow;
+  final int? highlightCol;
 
   _SurfacePainter({
     required this.grid,
@@ -129,6 +137,8 @@ class _SurfacePainter extends CustomPainter {
     required this.zoom,
     this.optimalRangeOverride,
     required this.showIndices,
+    this.highlightRow,
+    this.highlightCol,
   });
 
   @override
@@ -140,9 +150,16 @@ class _SurfacePainter extends CustomPainter {
     final double safeRange = (maxValue - minValue).abs() < 1e-12 ? 1.0 : (maxValue - minValue);
 
     // World units and camera (enforce square cell proportion by using grid aspect)
-    final double unit = (math.min(size.width, size.height) * 0.9) / math.max(cols, rows);
-    final double heightScale = unit * 0.7;
+    // Keep the surface within a square region centered in the canvas
+    final double bound = math.min(size.width, size.height) * 0.8;
     final Offset center = Offset(size.width * 0.5, size.height * 0.55);
+    final Rect viewRect = Rect.fromCenter(center: center, width: bound, height: bound);
+    canvas.save();
+    canvas.clipRect(viewRect);
+
+    final double unit = (bound * 0.9) / math.max(cols, rows);
+    final double heightScale = unit * 0.7;
+    // center unchanged, used for projection
 
     final double cx = (cols - 1) / 2.0;
     final double cz = (rows - 1) / 2.0;
@@ -258,6 +275,40 @@ class _SurfacePainter extends CustomPainter {
       canvas.drawPath(path, wire);
     }
 
+    // Highlight selected cell as rectangle overlay
+    if (highlightRow != null && highlightCol != null &&
+        highlightRow! >= 0 && highlightRow! < rows &&
+        highlightCol! >= 0 && highlightCol! < cols) {
+      // Build the 4 corners for the selected cell and project
+      List<Offset?> corners = [];
+      List<Offset> screenCorners = [];
+      final double cx = (cols - 1) / 2.0;
+      final double cz = (rows - 1) / 2.0;
+      final double cosY = math.cos(yaw), sinY = math.sin(yaw);
+      final double cosX = math.cos(pitch), sinX = math.sin(pitch);
+      Offset proj(double gx, double gz) {
+        final double x = (gx - cx) * unit;
+        final double z = (gz - cz) * unit;
+        const double y = 0;
+        final double x1 = cosY * x + sinY * z;
+        final double z1 = -sinY * x + cosY * z;
+        final double y2 = cosX * y - sinX * z1;
+        return center + Offset(zoom * x1, -zoom * y2);
+      }
+      final int r = highlightRow!;
+      final int c = highlightCol!;
+      screenCorners.add(proj(c.toDouble(), r.toDouble()));
+      screenCorners.add(proj(c + 1.0, r.toDouble()));
+      screenCorners.add(proj(c + 1.0, r + 1.0));
+      screenCorners.add(proj(c.toDouble(), r + 1.0));
+      final path = Path()..addPolygon(screenCorners, true);
+      final highlightPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0
+        ..color = Colors.yellowAccent;
+      canvas.drawPath(path, highlightPaint);
+    }
+
     // Axes indices: draw simple 0..N labels along approximate bottom/front edges
     if (showIndices) {
       final textStyle = TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 10);
@@ -294,6 +345,8 @@ class _SurfacePainter extends CustomPainter {
         tp.paint(canvas, p + const Offset(-14, -2));
       }
     }
+
+    canvas.restore();
   }
 
   @override
