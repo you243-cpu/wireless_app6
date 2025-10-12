@@ -9,8 +9,15 @@ import 'package:intl/intl.dart';
 class HeatmapGrid {
   final List<List<double>> grid;
   final double widthRatio; // Delta Lon / Delta Lat
+  final List<double>? latAxis; // optional: grid row positions in latitude
+  final List<double>? lonAxis; // optional: grid column positions in longitude
 
-  HeatmapGrid({required this.grid, required this.widthRatio});
+  HeatmapGrid({
+    required this.grid,
+    required this.widthRatio,
+    this.latAxis,
+    this.lonAxis,
+  });
 }
 
 // A single data point
@@ -332,7 +339,7 @@ class HeatmapService {
     if (candidates.isEmpty) {
       // Fallback to index-based grid with a square ratio
       final fallbackGrid = createGrid(metric: metric, start: start, end: end);
-      return HeatmapGrid(grid: fallbackGrid, widthRatio: 1.0);
+      return HeatmapGrid(grid: fallbackGrid, widthRatio: 1.0, latAxis: null, lonAxis: null);
     }
 
     // Determine resolution
@@ -413,7 +420,7 @@ class HeatmapService {
       }
     }
     
-    return HeatmapGrid(grid: grid, widthRatio: ratio);
+    return HeatmapGrid(grid: grid, widthRatio: ratio, latAxis: latAxis, lonAxis: lonAxis);
   }
 
   // Build a uniform, seamless grid using lat/lon and averaging across selected metrics
@@ -437,7 +444,7 @@ class HeatmapService {
     if (candidates.isEmpty) {
       // Fallback to index-based grid with a square ratio
       final fallbackGrid = createGridForMetrics(metrics: metrics, start: start, end: end);
-      return HeatmapGrid(grid: fallbackGrid, widthRatio: 1.0);
+      return HeatmapGrid(grid: fallbackGrid, widthRatio: 1.0, latAxis: null, lonAxis: null);
     }
 
     // Determine resolution
@@ -518,7 +525,7 @@ class HeatmapService {
       }
     }
 
-    return HeatmapGrid(grid: grid, widthRatio: ratio);
+    return HeatmapGrid(grid: grid, widthRatio: ratio, latAxis: latAxis, lonAxis: lonAxis);
   }
 
   double _metricValue(HeatmapPoint p, String metric) {
@@ -563,6 +570,64 @@ class HeatmapService {
 
 }
 
+extension on double {
+  bool get isValidFinite => isFinite && !isNaN;
+}
+
+extension _IterableExt<T> on Iterable<T> {
+  R? firstOrNull<R>(R Function(T) map) {
+    for (final e in this) {
+      return map(e);
+    }
+    return null;
+  }
+}
+
+// Interpolate a single metric value at a given lat/lon using IDW
+double interpolateAt({
+  required List<HeatmapPoint> points,
+  required String metric,
+  required double lat,
+  required double lon,
+  required DateTime start,
+  required DateTime end,
+}) {
+  const double p = 2.0;
+  const double epsilon = 1e-12;
+  double weightedSum = 0.0;
+  double weightSum = 0.0;
+  for (final pt in points) {
+    if (pt.lat == null || pt.lon == null) continue;
+    if (pt.t.isBefore(start) || pt.t.isAfter(end)) continue;
+    final v = pt.metrics[metric];
+    if (v == null || !v.isFinite) continue;
+    final double dLat = pt.lat! - lat;
+    final double dLon = pt.lon! - lon;
+    final double dist = sqrt(dLat * dLat + dLon * dLon);
+    final double weight = 1.0 / (pow(dist, p) + epsilon);
+    weightedSum += v * weight;
+    weightSum += weight;
+  }
+  if (weightSum <= 0) return double.nan;
+  return weightedSum / weightSum;
+}
+
+// Interpolate several metrics at a given lat/lon
+Map<String, double> interpolateAtForMetrics({
+  required List<HeatmapPoint> points,
+  required List<String> metrics,
+  required double lat,
+  required double lon,
+  required DateTime start,
+  required DateTime end,
+}) {
+  final Map<String, double> out = {};
+  for (final m in metrics) {
+    out[m] = interpolateAt(points: points, metric: m, lat: lat, lon: lon, start: start, end: end);
+  }
+  return out;
+}
+
 class _Sample {
   final double lat;
   final double lon;
@@ -595,6 +660,68 @@ int encodePlantStatus(String status) {
   return 0; // Unknown
 }
 
+// Human-readable label for a plant status code
+String labelForPlantStatusCode(int code) {
+  switch (code) {
+    case 1:
+      return 'Healthy';
+    case 2:
+      return 'Anthracnose - Symptomatic (wilt)';
+    case 3:
+      return 'Anthracnose - Symptomatic (sunken spots)';
+    case 4:
+      return 'No Turmeric Detected';
+    case 5:
+      return 'Anthracnose - Symptomatic (yellowing)';
+    case 6:
+      return 'Anthracnose - Symptomatic (blight)';
+    case 7:
+      return 'Anthracnose - Symptomatic (lesions)';
+    default:
+      return 'Unknown';
+  }
+}
+
+// Color for a plant status code, consistent across app (heatmap/graph legends)
+Color colorForPlantStatusCode(int code) {
+  switch (code) {
+    case 1:
+      return const Color(0xFF2E7D32); // Healthy - green
+    case 2:
+      return const Color(0xFF8E24AA); // Anthracnose (wilt) - purple
+    case 3:
+      return const Color(0xFFD32F2F); // Anthracnose (sunken spots) - red
+    case 4:
+      return const Color(0xFF616161); // No Turmeric Detected - gray
+    case 5:
+      return const Color(0xFFFBC02D); // Anthracnose (yellowing) - yellow
+    case 6:
+      return const Color(0xFFEF6C00); // Anthracnose (blight) - orange
+    case 7:
+      return const Color(0xFF1E88E5); // Anthracnose (lesions) - blue
+    default:
+      return Colors.black.withOpacity(0.15); // Unknown
+  }
+}
+
+class PlantStatusCategoryItem {
+  final int code;
+  final String label;
+  final Color color;
+  const PlantStatusCategoryItem({required this.code, required this.label, required this.color});
+}
+
+List<PlantStatusCategoryItem> getPlantStatusLegendItems() {
+  const codes = [1, 2, 3, 4, 5, 6, 7];
+  return codes
+      .map((c) => PlantStatusCategoryItem(
+            code: c,
+            label: labelForPlantStatusCode(c),
+            color: colorForPlantStatusCode(c),
+          ))
+      .toList();
+}
+
 // This map defines the "optimal" range for each metric for color scaling.
 final Map<String, List<double>> optimalRanges = {
   'pH': [6.0, 7.5],
@@ -616,27 +743,8 @@ Color valueToColor(
   List<double>? optimalRangeOverride,
 }) {
   if (metric == 'Plant Status') {
-    // Map encoded plant status to fixed category colors
-    // 0: Unknown/None, 1: Healthy, 2..N: specific disease classes
-    final int code = value.isNaN ? 0 : value.round().clamp(0, 10);
-    switch (code) {
-      case 1:
-        return const Color(0xFF2E7D32); // Healthy - green
-      case 2:
-        return const Color(0xFF8E24AA); // Anthracnose (wilt) - purple
-      case 3:
-        return const Color(0xFFD32F2F); // Anthracnose (sunken spots) - red
-      case 4:
-        return const Color(0xFF616161); // No Turmeric Detected - gray
-      case 5:
-        return const Color(0xFFFBC02D); // Anthracnose (yellowing) - yellow
-      case 6:
-        return const Color(0xFFEF6C00); // Anthracnose (blight) - orange
-      case 7:
-        return const Color(0xFF1E88E5); // Anthracnose (lesions) - blue
-      default:
-        return Colors.black.withOpacity(0.15); // Unknown
-    }
+    final int code = value.isNaN ? 0 : value.round();
+    return colorForPlantStatusCode(code);
   }
   if (value.isNaN) {
     return Colors.black.withOpacity(0.1);
