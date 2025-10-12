@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../widgets/line_chart.dart';
 import '../widgets/multi_line_chart.dart';
 import '../providers/csv_data_provider.dart';
+import '../services/heatmap_service.dart';
 
 class GraphScreen extends StatefulWidget {
   const GraphScreen({super.key});
@@ -60,7 +61,7 @@ class _GraphScreenState extends State<GraphScreen> {
           ),
           Expanded(
             child: DefaultTabController(
-              length: 8,
+              length: 9,
               child: Column(
                 children: [
                   TabBar(
@@ -76,6 +77,7 @@ class _GraphScreenState extends State<GraphScreen> {
                       Tab(text: "Temperature"),
                       Tab(text: "Humidity"),
                       Tab(text: "EC"),
+                      Tab(text: "Plant Status"),
                       Tab(text: "All"),
                     ],
                   ),
@@ -135,6 +137,20 @@ class _GraphScreenState extends State<GraphScreen> {
                           data: provider.ec,
                           color: Colors.indigo,
                           label: "EC",
+                          timestamps: provider.timestamps,
+                          zoomLevel: zoomLevel,
+                          scrollIndex: scrollIndex,
+                        ),
+                        // Plant Status: map categories to numeric codes for the line chart
+                        LineChartWidget(
+                          data: List<double>.generate(
+                            provider.timestamps.length,
+                            (i) => i < provider.plantStatus.length
+                                ? encodePlantStatus(provider.plantStatus[i]).toDouble()
+                                : 0.0,
+                          ),
+                          color: Colors.teal,
+                          label: "Plant Status (code)",
                           timestamps: provider.timestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
