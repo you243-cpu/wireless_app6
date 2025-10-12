@@ -716,11 +716,14 @@ List<String> parseSymptomsFromStatus(String status) {
 
 // Encode plant status as the count of symptoms (0..N)
 int encodePlantStatus(String status) {
+  final lower = status.trim().toLowerCase();
+  if (lower.contains('no turmeric')) return -1; // special category
   return parseSymptomsFromStatus(status).length;
 }
 
 // Human-readable label for a symptom count
 String labelForPlantStatusCode(int code) {
+  if (code == -1) return 'No Turmeric Detected';
   if (code <= 0) return '0';
   return code.toString();
 }
@@ -728,6 +731,8 @@ String labelForPlantStatusCode(int code) {
 // Color for a symptom count (0 = none, higher = worse)
 Color colorForPlantStatusCode(int code) {
   switch (code) {
+    case -1:
+      return const Color(0xFF616161); // No Turmeric Detected - gray
     case 0:
       return const Color(0xFF2E7D32); // None - green
     case 1:
@@ -751,8 +756,8 @@ class PlantStatusCategoryItem {
 }
 
 List<PlantStatusCategoryItem> getPlantStatusLegendItems() {
-  // Show a fixed range of counts in the legend (0..5)
-  const codes = [0, 1, 2, 3, 4, 5];
+  // Show special category and a fixed range of counts (0..5)
+  const codes = [-1, 0, 1, 2, 3, 4, 5];
   return codes
       .map((c) => PlantStatusCategoryItem(
             code: c,
