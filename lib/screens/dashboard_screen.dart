@@ -97,7 +97,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Load default CSV asset
   Future<void> _loadAssetCSV() async {
     try {
-      final csvString = await rootBundle.loadString('assets/simulated_soil_square.csv');
+      final csvString = await rootBundle.loadString('assets/synthetic_soil_and_plant_data_s2_pattern.csv');
       final parsed = await CSVService.parseCSV(csvString);
 
       // Check if parsing returned valid data
@@ -174,6 +174,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         timestamps: normalized["timestamps"]!.cast<DateTime>(),
         latitudes: normalized["latitudes"]!.cast<double>(),
         longitudes: normalized["longitudes"]!.cast<double>(),
+        plantStatus: (normalized["plant_status"] ?? const <dynamic>[]) 
+            .map((e) => e?.toString() ?? '')
+            .toList(),
       );
 
       _showSnackBar("✅ CSV data loaded successfully!");
@@ -292,7 +295,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 20),
                 GaugesWidget(pH: pH),
                 const SizedBox(height: 20),
-                NutrientCard(N: N, P: P, K: K),
+                NutrientCard(
+                  N: N,
+                  P: P,
+                  K: K,
+                  plantStatus: (() {
+                    final provider = context.read<CSVDataProvider>();
+                    if (provider.plantStatus.isNotEmpty) {
+                      return provider.plantStatus.last;
+                    }
+                    return '';
+                  })(),
+                ),
                 const SizedBox(height: 20),
                 Text(
                   "🌡️ Temp: $temperature °C    💧 Humidity: $humidity%    ⚡ EC: $ec",
