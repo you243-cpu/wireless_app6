@@ -13,6 +13,8 @@ class Heatmap2D extends StatelessWidget {
   final List<double>? optimalRangeOverride;
   final bool showIndices;
   final void Function(int row, int col)? onCellTap;
+  final int? highlightRow;
+  final int? highlightCol;
 
   const Heatmap2D({
     super.key,
@@ -26,6 +28,8 @@ class Heatmap2D extends StatelessWidget {
     this.optimalRangeOverride,
     this.showIndices = false,
     this.onCellTap,
+    this.highlightRow,
+    this.highlightCol,
   });
 
   @override
@@ -65,11 +69,23 @@ class Heatmap2D extends StatelessWidget {
                         final Size size = box.size;
                         final int rows = grid.length;
                         final int cols = grid[0].length;
-                        final double cellWidth = size.width / cols;
-                        final double cellHeight = size.height / rows;
+                        // Reserve margins for axes when indices are shown
+                        final double leftMargin = showIndices ? 28.0 : 0.0;
+                        final double topMargin = showIndices ? 18.0 : 0.0;
+                        final double rightMargin = showIndices ? 6.0 : 0.0;
+                        final double bottomMargin = showIndices ? 6.0 : 0.0;
+                        final double drawWidth = size.width - leftMargin - rightMargin;
+                        final double drawHeight = size.height - topMargin - bottomMargin;
+                        final double cellWidth = drawWidth / cols;
+                        final double cellHeight = drawHeight / rows;
                         final Offset p = details.localPosition;
-                        final int c = (p.dx / cellWidth).floor().clamp(0, cols - 1);
-                        final int r = (p.dy / cellHeight).floor().clamp(0, rows - 1);
+                        if (p.dx < leftMargin || p.dy < topMargin ||
+                            p.dx > leftMargin + drawWidth || p.dy > topMargin + drawHeight) {
+                          onCellTap?.call(-1, -1); // deselect
+                          return;
+                        }
+                        final int c = ((p.dx - leftMargin) / cellWidth).floor().clamp(0, cols - 1);
+                        final int r = ((p.dy - topMargin) / cellHeight).floor().clamp(0, rows - 1);
                         onCellTap?.call(r, c);
                       },
                 child: CustomPaint(
@@ -82,6 +98,8 @@ class Heatmap2D extends StatelessWidget {
                     maxValue,
                     optimalRangeOverride,
                     showIndices,
+                    highlightRow,
+                    highlightCol,
                   ),
                 ),
               ),
@@ -102,9 +120,11 @@ class _HeatmapPainter extends CustomPainter {
   final double maxValue;
   final List<double>? optimalRangeOverride;
   final bool showIndices;
+  final int? highlightRow;
+  final int? highlightCol;
 
   _HeatmapPainter(this.grid, this.showGridLines, this.isDark,
-      this.metricLabel, this.minValue, this.maxValue, this.optimalRangeOverride, this.showIndices);
+      this.metricLabel, this.minValue, this.maxValue, this.optimalRangeOverride, this.showIndices, this.highlightRow, this.highlightCol);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -116,9 +136,15 @@ class _HeatmapPainter extends CustomPainter {
     final rows = grid.length;
     final cols = grid[0].length;
     final paint = Paint()..isAntiAlias = false; // Avoid hairline seams between cells
-
-    final cellWidth = size.width / cols;
-    final cellHeight = size.height / rows;
+    // Margins for axes when indices enabled
+    final double leftMargin = showIndices ? 28.0 : 0.0;
+    final double topMargin = showIndices ? 18.0 : 0.0;
+    final double rightMargin = showIndices ? 6.0 : 0.0;
+    final double bottomMargin = showIndices ? 6.0 : 0.0;
+    final double drawWidth = size.width - leftMargin - rightMargin;
+    final double drawHeight = size.height - topMargin - bottomMargin;
+    final cellWidth = drawWidth / cols;
+    final cellHeight = drawHeight / rows;
 
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
@@ -128,8 +154,8 @@ class _HeatmapPainter extends CustomPainter {
         paint.color = valueToColor(cellValue, minValue, maxValue, metricLabel,
             optimalRangeOverride: optimalRangeOverride);
         
-        final double x0 = c * cellWidth;
-        final double y0 = r * cellHeight;
+        final double x0 = leftMargin + c * cellWidth;
+        final double y0 = topMargin + r * cellHeight;
         
         // Simplified and safer boundary calculation using fromLTRB
         final double x1 = (c + 1) * cellWidth; 
@@ -148,6 +174,20 @@ class _HeatmapPainter extends CustomPainter {
       }
     }
 
+    // Draw highlight rectangle around selected cell
+    if (highlightRow != null && highlightCol != null &&
+        highlightRow! >= 0 && highlightRow! < rows &&
+        highlightCol! >= 0 && highlightCol! < cols) {
+      final double hx0 = leftMargin + highlightCol! * cellWidth;
+      final double hy0 = topMargin + highlightRow! * cellHeight;
+      final rect = Rect.fromLTWH(hx0, hy0, cellWidth, cellHeight);
+      final highlightPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0
+        ..color = Colors.yellowAccent;
+      canvas.drawRect(rect, highlightPaint);
+    }
+
     // Draw axis indices along top (columns) and left (rows)
     if (showIndices) {
       final textStyle = TextStyle(
@@ -157,29 +197,37 @@ class _HeatmapPainter extends CustomPainter {
       final bgPaint = Paint()
         ..color = (isDark ? Colors.black : Colors.white).withOpacity(0.6)
         ..style = PaintingStyle.fill;
-      // Columns along top
+      // Draw border around grid area
+      final borderPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0
+        ..color = isDark ? Colors.white60 : Colors.black87;
+      final innerRect = Rect.fromLTWH(leftMargin, topMargin, drawWidth, drawHeight);
+      canvas.drawRect(innerRect, borderPaint);
+
+      // Columns labels above top edge
       for (int c = 0; c < cols; c++) {
         final tp = TextPainter(
           text: TextSpan(text: c.toString(), style: textStyle),
           textDirection: TextDirection.ltr,
         )..layout();
-        final dx = c * cellWidth + cellWidth * 0.5 - tp.width / 2;
-        const double margin = 2;
-        final rect = Rect.fromLTWH(dx - 2, margin - 1, tp.width + 4, tp.height + 2);
+        final dx = leftMargin + c * cellWidth + cellWidth * 0.5 - tp.width / 2;
+        final double ty = topMargin - tp.height - 2;
+        final rect = Rect.fromLTWH(dx - 2, ty - 1, tp.width + 4, tp.height + 2);
         canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), bgPaint);
-        tp.paint(canvas, Offset(dx, margin));
+        tp.paint(canvas, Offset(dx, ty));
       }
-      // Rows along left
+      // Rows labels left of left edge
       for (int r = 0; r < rows; r++) {
         final tp = TextPainter(
           text: TextSpan(text: r.toString(), style: textStyle),
           textDirection: TextDirection.ltr,
         )..layout();
-        const double margin = 2;
-        final dy = r * cellHeight + cellHeight * 0.5 - tp.height / 2;
-        final rect = Rect.fromLTWH(margin - 1, dy - 1, tp.width + 4, tp.height + 2);
+        final double dy = topMargin + r * cellHeight + cellHeight * 0.5 - tp.height / 2;
+        final double lx = leftMargin - tp.width - 4;
+        final rect = Rect.fromLTWH(lx - 2, dy - 1, tp.width + 4, tp.height + 2);
         canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), bgPaint);
-        tp.paint(canvas, Offset(margin, dy));
+        tp.paint(canvas, Offset(lx, dy));
       }
     }
   }
