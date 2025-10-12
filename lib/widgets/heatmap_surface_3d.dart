@@ -2,6 +2,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/heatmap_service.dart';
 
+// Controller to allow parent widgets to trigger a reset of the 3D view
+class HeatmapSurface3DController {
+  VoidCallback? _resetCallback;
+  void _bind(VoidCallback cb) { _resetCallback = cb; }
+  void reset() { _resetCallback?.call(); }
+}
+
 class HeatmapSurface3D extends StatefulWidget {
   final List<List<double>> grid;
   final String metricLabel;
@@ -12,6 +19,7 @@ class HeatmapSurface3D extends StatefulWidget {
   final void Function(int row, int col)? onCellTap;
   final int? highlightRow;
   final int? highlightCol;
+  final HeatmapSurface3DController? controller;
 
   const HeatmapSurface3D({
     super.key,
@@ -24,6 +32,7 @@ class HeatmapSurface3D extends StatefulWidget {
     this.onCellTap,
     this.highlightRow,
     this.highlightCol,
+    this.controller,
   });
 
   @override
@@ -42,6 +51,21 @@ class _HeatmapSurface3DState extends State<HeatmapSurface3D> {
       _pitch = 0.6;
       _zoom = 1.0;
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Bind controller if provided
+    widget.controller?._bind(_resetView);
+  }
+
+  @override
+  void didUpdateWidget(covariant HeatmapSurface3D oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      widget.controller?._bind(_resetView);
+    }
   }
 
   @override
