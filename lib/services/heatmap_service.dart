@@ -28,6 +28,10 @@ class HeatmapPoint {
   final Map<String, double> metrics;
   final double? lat; // optional
   final double? lon; // optional
+  // Raw plant status string as provided by the dataset (if available)
+  final String? plantStatusRaw;
+  // Parsed list of individual symptoms extracted from plant status
+  final List<String>? symptoms;
 
   HeatmapPoint({
     required this.x,
@@ -36,6 +40,8 @@ class HeatmapPoint {
     required this.metrics,
     this.lat,
     this.lon,
+    this.plantStatusRaw,
+    this.symptoms,
   });
 }
 
@@ -112,6 +118,7 @@ class HeatmapService {
           display = 'K';
           break;
         case 'plant_status':
+          // Keep metric label consistent across the app
           display = 'Plant Status';
           break;
         default:
@@ -153,10 +160,15 @@ class HeatmapService {
 
       final DateTime t = _parseDate(row[useXY ? (tIndex != -1 ? tIndex : timestampIndex) : timestampIndex]);
       final Map<String, double> metrics = {};
+      String? plantStatusRaw;
+      List<String>? symptoms;
       metricIndexToName.forEach((col, name) {
         if (lowerHeader[col] == 'plant_status') {
-          final raw = row[col]?.toString() ?? '';
-          metrics[name] = encodePlantStatus(raw).toDouble();
+          final s = row[col]?.toString() ?? '';
+          plantStatusRaw = s;
+          symptoms = parseSymptomsFromStatus(s);
+          // Store as a numeric metric: total number of symptoms in the status field
+          metrics[name] = encodePlantStatus(s).toDouble();
         } else {
           metrics[name] = _toDouble(row[col]);
         }
@@ -168,6 +180,8 @@ class HeatmapService {
           y: (row[yIndex] as num).toInt(),
           t: t,
           metrics: metrics,
+          plantStatusRaw: plantStatusRaw,
+          symptoms: symptoms,
         ));
       } else {
         raw.add(_RawPoint(
@@ -175,6 +189,8 @@ class HeatmapService {
           lon: _toDouble(row[lonIndex]),
           t: t,
           metrics: metrics,
+          plantStatusRaw: plantStatusRaw,
+          symptoms: symptoms,
         ));
       }
     }
@@ -195,6 +211,8 @@ class HeatmapService {
         metrics: r.metrics,
         lat: r.lat,
         lon: r.lon,
+        plantStatusRaw: r.plantStatusRaw,
+        symptoms: r.symptoms,
       )).toList();
     }
 
@@ -206,6 +224,8 @@ class HeatmapService {
       metrics: r.metrics,
       lat: r.lat,
       lon: r.lon,
+      plantStatusRaw: r.plantStatusRaw,
+      symptoms: r.symptoms,
     )).toList();
   }
 
@@ -642,65 +662,84 @@ class _RawPoint {
   final double? lon;
   final DateTime t;
   final Map<String, double> metrics;
+  final String? plantStatusRaw;
+  final List<String>? symptoms;
 
-  _RawPoint({this.x, this.y, this.lat, this.lon, required this.t, required this.metrics});
+  _RawPoint({this.x, this.y, this.lat, this.lon, required this.t, required this.metrics, this.plantStatusRaw, this.symptoms});
 }
 
-// Encode plant status strings into numeric categories for heatmap coloring
-int encodePlantStatus(String status) {
-  final s = status.trim().toLowerCase();
-  if (s.isEmpty) return 0;
-  if (s == 'healthy') return 1;
-  if (s.contains('anthracnose') && s.contains('wilt')) return 2;
-  if (s.contains('anthracnose') && s.contains('sunken')) return 3;
-  if (s.contains('no turmeric')) return 4;
-  if (s.contains('anthracnose') && s.contains('yellow')) return 5;
-  if (s.contains('anthracnose') && s.contains('blight')) return 6;
-  if (s.contains('anthracnose') && s.contains('lesion')) return 7;
-  return 0; // Unknown
-}
-
-// Human-readable label for a plant status code
-String labelForPlantStatusCode(int code) {
-  switch (code) {
-    case 1:
-      return 'Healthy';
-    case 2:
-      return 'Anthracnose - Symptomatic (wilt)';
-    case 3:
-      return 'Anthracnose - Symptomatic (sunken spots)';
-    case 4:
-      return 'No Turmeric Detected';
-    case 5:
-      return 'Anthracnose - Symptomatic (yellowing)';
-    case 6:
-      return 'Anthracnose - Symptomatic (blight)';
-    case 7:
-      return 'Anthracnose - Symptomatic (lesions)';
-    default:
-      return 'Unknown';
+// Parse individual symptoms from a plant status string.
+// Expected formats include:
+//  - "Anthracnose - Symptomatic (lesions, wilt, sunken spots, blight)"
+//  - "Healthy"
+//  - "No Turmeric Detected"
+List<String> parseSymptomsFromStatus(String status) {
+  final s = status.trim();
+  if (s.isEmpty) return const [];
+  final lower = s.toLowerCase();
+  if (lower == 'healthy') return const [];
+  if (lower.contains('no turmeric')) return const [];
+  // Extract inside parentheses if present
+  final int open = s.indexOf('(');
+  final int close = s.lastIndexOf(')');
+  String inner = '';
+  if (open != -1 && close != -1 && close > open) {
+    inner = s.substring(open + 1, close);
+  } else {
+    // Fallback: take the whole string after the dash if present
+    final dash = s.indexOf('-');
+    inner = dash != -1 ? s.substring(dash + 1) : s;
   }
+  // Split by comma and normalize
+  final parts = inner
+      .split(',')
+      .map((p) => p.trim().toLowerCase())
+      .where((p) => p.isNotEmpty)
+      .toList();
+  // Normalize known symptom names
+  List<String> normalized = parts.map((p) {
+    if (p.contains('sunken')) return 'sunken spots';
+    if (p.contains('lesion')) return 'lesions';
+    if (p.contains('yellow')) return 'yellowing';
+    if (p.contains('wilt')) return 'wilt';
+    if (p.contains('blight')) return 'blight';
+    return p; // keep as-is for unknowns
+  }).toList();
+  // Deduplicate while preserving order
+  final seen = <String>{};
+  normalized = [
+    for (final item in normalized)
+      if (seen.add(item)) item,
+  ];
+  return normalized;
 }
 
-// Color for a plant status code, consistent across app (heatmap/graph legends)
+// Encode plant status as the count of symptoms (0..N)
+int encodePlantStatus(String status) {
+  return parseSymptomsFromStatus(status).length;
+}
+
+// Human-readable label for a symptom count
+String labelForPlantStatusCode(int code) {
+  if (code <= 0) return '0';
+  return code.toString();
+}
+
+// Color for a symptom count (0 = none, higher = worse)
 Color colorForPlantStatusCode(int code) {
   switch (code) {
+    case 0:
+      return const Color(0xFF2E7D32); // None - green
     case 1:
-      return const Color(0xFF2E7D32); // Healthy - green
+      return const Color(0xFFF9A825); // 1 - amber
     case 2:
-      return const Color(0xFF8E24AA); // Anthracnose (wilt) - purple
+      return const Color(0xFFEF6C00); // 2 - orange
     case 3:
-      return const Color(0xFFD32F2F); // Anthracnose (sunken spots) - red
+      return const Color(0xFFE53935); // 3 - red
     case 4:
-      return const Color(0xFF616161); // No Turmeric Detected - gray
-    case 5:
-      return const Color(0xFFFBC02D); // Anthracnose (yellowing) - yellow
-    case 6:
-      return const Color(0xFFEF6C00); // Anthracnose (blight) - orange
-    case 7:
-      return const Color(0xFF1E88E5); // Anthracnose (lesions) - blue
+      return const Color(0xFFB71C1C); // 4 - dark red
     default:
-      return Colors.black.withOpacity(0.15); // Unknown
+      return const Color(0xFF6A1B9A); // 5+ - purple as overflow
   }
 }
 
@@ -712,7 +751,8 @@ class PlantStatusCategoryItem {
 }
 
 List<PlantStatusCategoryItem> getPlantStatusLegendItems() {
-  const codes = [1, 2, 3, 4, 5, 6, 7];
+  // Show a fixed range of counts in the legend (0..5)
+  const codes = [0, 1, 2, 3, 4, 5];
   return codes
       .map((c) => PlantStatusCategoryItem(
             code: c,
@@ -731,7 +771,8 @@ final Map<String, List<double>> optimalRanges = {
   'N': [100.0, 150.0],
   'P': [20.0, 50.0],
   'K': [150.0, 250.0],
-  'All': [0, 1]
+  'All': [0, 1],
+  'Symptom Count': [0, 5],
 };
 
 // Converts a value to a color based on the optimal range for the metric
@@ -742,7 +783,7 @@ Color valueToColor(
   String metric, {
   List<double>? optimalRangeOverride,
 }) {
-  if (metric == 'Plant Status') {
+  if (metric == 'Plant Status' || metric == 'Symptom Count') {
     final int code = value.isNaN ? 0 : value.round();
     return colorForPlantStatusCode(code);
   }
@@ -786,4 +827,32 @@ Color valueToColor(
     final progress = ((normalizedValue - optimalMaxStop) / denom).clamp(0.0, 1.0);
     return Color.lerp(Colors.green, Colors.red, progress)!;
   }
+}
+
+// Find the nearest sample (by lat/lon) within a time window and return its symptoms list.
+// If multiple points exist at equal distance, the first encountered is returned.
+List<String> nearestSymptomsAt({
+  required List<HeatmapPoint> points,
+  required double lat,
+  required double lon,
+  required DateTime start,
+  required DateTime end,
+}) {
+  HeatmapPoint? nearest;
+  double bestDist2 = double.infinity;
+  for (final pt in points) {
+    if (pt.lat == null || pt.lon == null) continue;
+    if (pt.t.isBefore(start) || pt.t.isAfter(end)) continue;
+    final double dLat = pt.lat! - lat;
+    final double dLon = pt.lon! - lon;
+    final double dist2 = dLat * dLat + dLon * dLon;
+    if (dist2 < bestDist2) {
+      bestDist2 = dist2;
+      nearest = pt;
+    }
+  }
+  if (nearest == null) return const [];
+  if (nearest.symptoms != null) return nearest.symptoms!;
+  if (nearest.plantStatusRaw != null) return parseSymptomsFromStatus(nearest.plantStatusRaw!);
+  return const [];
 }
