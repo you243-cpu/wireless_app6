@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../services/heatmap_service.dart'; // Ensure this import path is correct
 
 // Outline thickness for each heatmap cell (in logical pixels)
-const double kCellOutlineWidth = 0.5;
+const double kCellOutlineWidth = 0.2;
 
 class Heatmap2D extends StatelessWidget {
   final List<List<double>> grid;
