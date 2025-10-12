@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 
 class CSVService {
   /// Parse CSV from a raw string
@@ -43,6 +44,7 @@ class CSVService {
       "N": [],
       "P": [],
       "K": [],
+      "plant_status": [],
     };
 
     // Helper to get index of a header safely
@@ -55,7 +57,21 @@ class CSVService {
       final row = rows[i];
       try {
         if (idx("timestamp") != null) {
-          data["timestamps"]!.add(DateTime.parse(row[idx("timestamp")!].toString()));
+          final rawTs = row[idx("timestamp")!].toString();
+          DateTime? parsed;
+          try {
+            parsed = DateTime.parse(rawTs);
+          } catch (_) {
+            try {
+              // Accept single-digit hour (H) and space separator
+              parsed = DateFormat('yyyy-MM-dd H:mm:ss').parse(rawTs);
+            } catch (_) {
+              parsed = null;
+            }
+          }
+          if (parsed != null) {
+            data["timestamps"]!.add(parsed);
+          }
         }
         if (idx("lat") != null) {
           data["latitudes"]!.add(row[idx("lat")!].toDouble());
@@ -83,6 +99,10 @@ class CSVService {
         }
         if (idx("k") != null) {
           data["K"]!.add(row[idx("k")!].toDouble());
+        }
+        if (idx("plant_status") != null) {
+          final raw = row[idx("plant_status")!];
+          data["plant_status"]!.add(raw?.toString().trim() ?? "");
         }
       } catch (e) {
         // Skip bad rows gracefully
