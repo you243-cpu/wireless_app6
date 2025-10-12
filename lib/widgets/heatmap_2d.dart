@@ -170,7 +170,7 @@ class _HeatmapPainter extends CustomPainter {
 
     // Always draw per-cell outline to make each square distinguishable
     final border = Paint()
-      ..color = isDark ? Colors.white : Colors.black87
+      ..color = isDark ? Colors.black87 : Colors.black87
       ..style = PaintingStyle.stroke
       ..strokeWidth = kCellOutlineWidth;
     canvas.drawRect(rect, border);
