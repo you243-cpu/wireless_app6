@@ -71,14 +71,17 @@ class _HeatmapSurface3DState extends State<HeatmapSurface3D> {
             final Size size = Size(constraints.maxWidth, constraints.maxHeight);
             final int rows = widget.grid.length;
             final int cols = widget.grid[0].length;
-            final double unit = (math.min(size.width, size.height) * 0.9) / math.max(cols, rows);
+            final double bound = math.min(size.width, size.height) * 0.8;
+            final Offset center = Offset(size.width * 0.5, size.height * 0.55);
+            final Rect viewRect = Rect.fromCenter(center: center, width: bound, height: bound);
+            final Offset p = details.localPosition;
+            if (!viewRect.contains(p)) { widget.onCellTap?.call(-1, -1); return; }
+            final double unit = (bound * 0.9) / math.max(cols, rows);
             final double cx = (cols - 1) / 2.0;
             final double cz = (rows - 1) / 2.0;
             final double cosY = math.cos(_yaw), sinY = math.sin(_yaw);
             final double sinX = math.sin(_pitch);
             if (sinX.abs() < 1e-6) return; // avoid division
-            final Offset center = Offset(size.width * 0.5, size.height * 0.55);
-            final Offset p = details.localPosition;
             final double x1 = (p.dx - center.dx) / _zoom;
             final double z1 = (p.dy - center.dy) / (_zoom * sinX);
             final double x = cosY * x1 - sinY * z1;
