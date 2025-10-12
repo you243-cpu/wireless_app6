@@ -11,6 +11,8 @@ class Heatmap2D extends StatelessWidget {
   final double minValue;
   final double maxValue;
   final List<double>? optimalRangeOverride;
+  final bool showIndices;
+  final void Function(int row, int col)? onCellTap;
 
   const Heatmap2D({
     super.key,
@@ -22,6 +24,8 @@ class Heatmap2D extends StatelessWidget {
     required this.minValue,
     required this.maxValue,
     this.optimalRangeOverride,
+    this.showIndices = false,
+    this.onCellTap,
   });
 
   @override
@@ -52,9 +56,34 @@ class Heatmap2D extends StatelessWidget {
           builder: (context, constraints) {
             return AspectRatio(
               aspectRatio: aspectFromGrid,
-              child: CustomPaint(
-                painter: _HeatmapPainter(
-                    grid, showGridLines, isDark, metricLabel, minValue, maxValue, optimalRangeOverride),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: onCellTap == null
+                    ? null
+                    : (details) {
+                        final RenderBox box = context.findRenderObject() as RenderBox;
+                        final Size size = box.size;
+                        final int rows = grid.length;
+                        final int cols = grid[0].length;
+                        final double cellWidth = size.width / cols;
+                        final double cellHeight = size.height / rows;
+                        final Offset p = details.localPosition;
+                        final int c = (p.dx / cellWidth).floor().clamp(0, cols - 1);
+                        final int r = (p.dy / cellHeight).floor().clamp(0, rows - 1);
+                        onCellTap?.call(r, c);
+                      },
+                child: CustomPaint(
+                  painter: _HeatmapPainter(
+                    grid,
+                    showGridLines,
+                    isDark,
+                    metricLabel,
+                    minValue,
+                    maxValue,
+                    optimalRangeOverride,
+                    showIndices,
+                  ),
+                ),
               ),
             );
           },
@@ -72,9 +101,10 @@ class _HeatmapPainter extends CustomPainter {
   final double minValue;
   final double maxValue;
   final List<double>? optimalRangeOverride;
+  final bool showIndices;
 
   _HeatmapPainter(this.grid, this.showGridLines, this.isDark,
-      this.metricLabel, this.minValue, this.maxValue, this.optimalRangeOverride);
+      this.metricLabel, this.minValue, this.maxValue, this.optimalRangeOverride, this.showIndices);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -115,6 +145,41 @@ class _HeatmapPainter extends CustomPainter {
             ..style = PaintingStyle.stroke;
           canvas.drawRect(rect, border);
         }
+      }
+    }
+
+    // Draw axis indices along top (columns) and left (rows)
+    if (showIndices) {
+      final textStyle = TextStyle(
+        color: isDark ? Colors.white70 : Colors.black87,
+        fontSize: 10,
+      );
+      final bgPaint = Paint()
+        ..color = (isDark ? Colors.black : Colors.white).withOpacity(0.6)
+        ..style = PaintingStyle.fill;
+      // Columns along top
+      for (int c = 0; c < cols; c++) {
+        final tp = TextPainter(
+          text: TextSpan(text: c.toString(), style: textStyle),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final dx = c * cellWidth + cellWidth * 0.5 - tp.width / 2;
+        const double margin = 2;
+        final rect = Rect.fromLTWH(dx - 2, margin - 1, tp.width + 4, tp.height + 2);
+        canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), bgPaint);
+        tp.paint(canvas, Offset(dx, margin));
+      }
+      // Rows along left
+      for (int r = 0; r < rows; r++) {
+        final tp = TextPainter(
+          text: TextSpan(text: r.toString(), style: textStyle),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        const double margin = 2;
+        final dy = r * cellHeight + cellHeight * 0.5 - tp.height / 2;
+        final rect = Rect.fromLTWH(margin - 1, dy - 1, tp.width + 4, tp.height + 2);
+        canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), bgPaint);
+        tp.paint(canvas, Offset(margin, dy));
       }
     }
   }
