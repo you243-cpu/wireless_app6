@@ -266,6 +266,8 @@ Future<ui.Image> renderHeatmapImage({
       maxValue,
       optimalRangeOverride,
       false,
+      null,
+      null,
     );
     painter.paint(canvas, size);
     final picture = recorder.endRecording();
@@ -289,6 +291,8 @@ Future<ui.Image> renderHeatmapImage({
     maxValue,
     optimalRangeOverride,
     false,
+    null,
+    null,
   );
   painter.paint(canvas, size);
   final picture = recorder.endRecording();
