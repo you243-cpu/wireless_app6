@@ -244,33 +244,43 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   Widget _buildSelectionInfo() {
     if (_selectedValues == null) return const SizedBox.shrink();
     final isPlantStatus = _selectedValues!.keys.length == 1 && _selectedValues!.keys.first == 'Plant Status';
-    String valueText;
+    final List<Widget> chips = [];
     if (isPlantStatus) {
       final v = _selectedValues!['Plant Status'] ?? double.nan;
       final code = v.isNaN ? 0 : v.round();
-      valueText = labelForPlantStatusCode(code);
+      final label = labelForPlantStatusCode(code);
+      chips.add(_InfoChip(label: label, color: colorForPlantStatusCode(code)));
     } else {
-      valueText = _selectedValues!.entries
-          .map((e) => "${e.key}: ${e.value.isFinite ? e.value.toStringAsFixed(2) : 'N/A'}")
-          .join("    ");
+      // Always show indices first
+      chips.add(_InfoChip(label: _selectedRow != null && _selectedCol != null ? "r=${_selectedRow}, c=${_selectedCol}" : "r=?, c=?"));
+      if (_selectedLat != null && _selectedLon != null) {
+        chips.add(_InfoChip(label: "lat ${_selectedLat!.toStringAsFixed(5)}"));
+        chips.add(_InfoChip(label: "lon ${_selectedLon!.toStringAsFixed(5)}"));
+      }
+      // Show metric values
+      _selectedValues!.forEach((k, v) {
+        final String text = v.isFinite ? v.toStringAsFixed(2) : 'N/A';
+        chips.add(_InfoChip(label: "$k: $text"));
+      });
     }
-    final locText = (_selectedRow != null && _selectedCol != null)
-        ? "Cell [r=${_selectedRow}, c=${_selectedCol}]"
-        : "Cell [unknown]";
-    final geoText = (_selectedLat != null && _selectedLon != null)
-        ? "  lat=${_selectedLat!.toStringAsFixed(6)}, lon=${_selectedLon!.toStringAsFixed(6)}"
-        : "";
     return Align(
       alignment: Alignment.centerLeft,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark ? const Color(0x22111111) : const Color(0x22CCCCCC),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text("$locText$geoText    $valueText"),
+      child: Wrap(spacing: 6, runSpacing: 6, children: chips),
+    );
+  }
+
+  // Tiny pill chip used for selection info
+  Widget _InfoChip({required String label, Color? color}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1B1D20) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color ?? (isDark ? Colors.white24 : Colors.black12)),
+        boxShadow: [BoxShadow(color: (color ?? Colors.black).withOpacity(0.06), blurRadius: 3, offset: const Offset(0, 1))],
       ),
+      child: Text(label, style: Theme.of(context).textTheme.bodySmall),
     );
   }
 
@@ -767,7 +777,10 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                     Builder(builder: (context) {
                       final String label = selectedMetrics.length == 1 ? selectedMetrics.first : 'Average';
                       if (label == 'Plant Status') {
-                        return const PlantStatusLegend(axis: Axis.horizontal, isDense: true);
+                        return const SizedBox(
+                          height: 28,
+                          child: PlantStatusLegend(axis: Axis.horizontal, isDense: true, spacing: 8),
+                        );
                       }
                       return SizedBox(
                         height: 36,
@@ -785,6 +798,12 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                     }),
                   if (gridData != null && gridData!.isNotEmpty)
                     const SizedBox(height: 8),
+                  // Selected cell info directly below the heatmap (compact card)
+                  if (_selectedValues != null) ...[
+                    const SizedBox(height: 8),
+                    _buildSelectionInfo(),
+                  ],
+                  const SizedBox(height: 8),
                   Expanded(
                     child: (gridData != null && gridData!.isNotEmpty)
                         ? (is3DView
