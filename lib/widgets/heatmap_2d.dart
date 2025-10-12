@@ -167,8 +167,9 @@ class _HeatmapPainter extends CustomPainter {
 
         if (showGridLines) {
           final border = Paint()
-            ..color = isDark ? Colors.white24 : Colors.black12
-            ..style = PaintingStyle.stroke;
+            ..color = Colors.white.withOpacity(0.35)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.8;
           canvas.drawRect(rect, border);
         }
       }
@@ -197,14 +198,6 @@ class _HeatmapPainter extends CustomPainter {
       final bgPaint = Paint()
         ..color = (isDark ? Colors.black : Colors.white).withOpacity(0.6)
         ..style = PaintingStyle.fill;
-      // Draw border around grid area
-      final borderPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.0
-        ..color = isDark ? Colors.white60 : Colors.black87;
-      final innerRect = Rect.fromLTWH(leftMargin, topMargin, drawWidth, drawHeight);
-      canvas.drawRect(innerRect, borderPaint);
-
       // Columns labels above top edge
       for (int c = 0; c < cols; c++) {
         final tp = TextPainter(
