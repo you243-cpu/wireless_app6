@@ -70,7 +70,7 @@ class HeatmapService {
       throw Exception("CSV must contain either (x,y,t) or (timestamp,lat,lon) columns.");
     }
 
-    // Identify metric columns and normalize display names
+    // Identify metric columns and normalize display names (including categorical plant status)
     final Map<int, String> metricIndexToName = {};
     for (int i = 0; i < header.length; i++) {
       if (useXY) {
@@ -103,6 +103,9 @@ class HeatmapService {
           break;
         case 'k':
           display = 'K';
+          break;
+        case 'plant_status':
+          display = 'Plant Status';
           break;
         default:
           // Keep original if unknown
@@ -144,7 +147,12 @@ class HeatmapService {
       final DateTime t = _parseDate(row[useXY ? (tIndex != -1 ? tIndex : timestampIndex) : timestampIndex]);
       final Map<String, double> metrics = {};
       metricIndexToName.forEach((col, name) {
-        metrics[name] = _toDouble(row[col]);
+        if (lowerHeader[col] == 'plant_status') {
+          final raw = row[col]?.toString() ?? '';
+          metrics[name] = encodePlantStatus(raw).toDouble();
+        } else {
+          metrics[name] = _toDouble(row[col]);
+        }
       });
 
       if (useXY) {
@@ -573,6 +581,20 @@ class _RawPoint {
   _RawPoint({this.x, this.y, this.lat, this.lon, required this.t, required this.metrics});
 }
 
+// Encode plant status strings into numeric categories for heatmap coloring
+int encodePlantStatus(String status) {
+  final s = status.trim().toLowerCase();
+  if (s.isEmpty) return 0;
+  if (s == 'healthy') return 1;
+  if (s.contains('anthracnose') && s.contains('wilt')) return 2;
+  if (s.contains('anthracnose') && s.contains('sunken')) return 3;
+  if (s.contains('no turmeric')) return 4;
+  if (s.contains('anthracnose') && s.contains('yellow')) return 5;
+  if (s.contains('anthracnose') && s.contains('blight')) return 6;
+  if (s.contains('anthracnose') && s.contains('lesion')) return 7;
+  return 0; // Unknown
+}
+
 // This map defines the "optimal" range for each metric for color scaling.
 final Map<String, List<double>> optimalRanges = {
   'pH': [6.0, 7.5],
@@ -593,6 +615,29 @@ Color valueToColor(
   String metric, {
   List<double>? optimalRangeOverride,
 }) {
+  if (metric == 'Plant Status') {
+    // Map encoded plant status to fixed category colors
+    // 0: Unknown/None, 1: Healthy, 2..N: specific disease classes
+    final int code = value.isNaN ? 0 : value.round().clamp(0, 10);
+    switch (code) {
+      case 1:
+        return const Color(0xFF2E7D32); // Healthy - green
+      case 2:
+        return const Color(0xFF8E24AA); // Anthracnose (wilt) - purple
+      case 3:
+        return const Color(0xFFD32F2F); // Anthracnose (sunken spots) - red
+      case 4:
+        return const Color(0xFF616161); // No Turmeric Detected - gray
+      case 5:
+        return const Color(0xFFFBC02D); // Anthracnose (yellowing) - yellow
+      case 6:
+        return const Color(0xFFEF6C00); // Anthracnose (blight) - orange
+      case 7:
+        return const Color(0xFF1E88E5); // Anthracnose (lesions) - blue
+      default:
+        return Colors.black.withOpacity(0.15); // Unknown
+    }
+  }
   if (value.isNaN) {
     return Colors.black.withOpacity(0.1);
   }
