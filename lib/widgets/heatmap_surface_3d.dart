@@ -312,7 +312,7 @@ class _SurfacePainter extends CustomPainter {
       canvas.drawPath(path, highlightPaint);
     }
 
-    // Axes indices: draw simple 0..N labels along approximate bottom/front edges
+    // Axes indices: draw simple 0..N labels with (0,0) at top-left (row 0, col 0)
     if (showIndices) {
       final textStyle = TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 10);
       final int rows = grid.length;
@@ -335,17 +335,17 @@ class _SurfacePainter extends CustomPainter {
         return center + Offset(zoom * x1, -zoom * y2);
       }
 
-      // Column indices along front edge (row = rows-1)
+      // Column indices along top edge (row = 0)
       for (int c = 0; c < cols; c++) {
-        final p = project(c.toDouble(), rows - 1.0);
+        final p = project(c.toDouble(), 0.0);
         final tp = TextPainter(text: TextSpan(text: c.toString(), style: textStyle), textDirection: TextDirection.ltr)..layout();
-        tp.paint(canvas, p + const Offset(-6, 2));
+        tp.paint(canvas, p + const Offset(-6, -12));
       }
       // Row indices along left edge (col = 0)
       for (int r = 0; r < rows; r++) {
         final p = project(0.0, r.toDouble());
         final tp = TextPainter(text: TextSpan(text: r.toString(), style: textStyle), textDirection: TextDirection.ltr)..layout();
-        tp.paint(canvas, p + const Offset(-14, -2));
+        tp.paint(canvas, p + const Offset(-18, -2));
       }
     }
 
