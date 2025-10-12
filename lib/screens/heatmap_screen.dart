@@ -30,6 +30,7 @@ class HeatmapScreen extends StatefulWidget {
 
 class _HeatmapScreenState extends State<HeatmapScreen> {
   final heatmapService = HeatmapService();
+  final HeatmapSurface3DController _surface3DController = HeatmapSurface3DController();
   final List<String> metrics = [
     'Plant Status',
     'pH',
@@ -261,23 +262,27 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       // Show all symptoms for this selected cell (nearest sample)
       final v = _selectedValues!['Plant Status'] ?? double.nan;
       final code = v.isNaN ? 0 : v.round();
-      // Add a count chip
-      chips.add(_InfoChip(label: "count: $code", color: colorForPlantStatusCode(code)));
-      List<String> syms = [];
-      if (_selectedLat != null && _selectedLon != null && startTime != null && endTime != null) {
-        syms = nearestSymptomsAt(
-          points: heatmapService.points,
-          lat: _selectedLat!,
-          lon: _selectedLon!,
-          start: startTime!,
-          end: endTime!,
-        );
-      }
-      if (syms.isEmpty) {
-        chips.add(_InfoChip(label: 'No symptoms'));
+      if (code == -1) {
+        chips.add(_InfoChip(label: 'No Turmeric Detected', color: colorForPlantStatusCode(code)));
       } else {
-        for (final s in syms) {
-          chips.add(_InfoChip(label: s));
+        // Add a count chip
+        chips.add(_InfoChip(label: "count: $code", color: colorForPlantStatusCode(code)));
+        List<String> syms = [];
+        if (_selectedLat != null && _selectedLon != null && startTime != null && endTime != null) {
+          syms = nearestSymptomsAt(
+            points: heatmapService.points,
+            lat: _selectedLat!,
+            lon: _selectedLon!,
+            start: startTime!,
+            end: endTime!,
+          );
+        }
+        if (syms.isEmpty) {
+          chips.add(_InfoChip(label: 'No symptoms'));
+        } else {
+          for (final s in syms) {
+            chips.add(_InfoChip(label: s));
+          }
         }
       }
     } else {
@@ -714,11 +719,10 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   }
 
   void _reset3DView() {
-    // Not used in custom painter (double-tap inside canvas resets),
-    // but for the model_viewer, we can reload the scene to reset camera.
-    setState(() {
-      _modelViewerKey = UniqueKey(); // force widget reload
-    });
+    // For the custom 3D surface, call controller.reset().
+    // For the (unused) model_viewer path, keep reload fallback.
+    _surface3DController.reset();
+    setState(() { _modelViewerKey = UniqueKey(); });
   }
 
   @override
@@ -838,6 +842,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                                 maxValue: maxValue,
                                 optimalRangeOverride: _optimalRangeOverride,
                                 showIndices: true,
+                                controller: _surface3DController,
                                 onCellTap: (r, c) {
                                   if (r < 0 || c < 0) {
                                     setState(() { _selectedValues = null; _selectedRow = null; _selectedCol = null; });
