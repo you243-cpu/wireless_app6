@@ -796,8 +796,14 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                                 optimalRangeOverride: _optimalRangeOverride,
                                 showIndices: true,
                                 onCellTap: (r, c) {
-                                  _handleCellSelection(r, c);
+                                  if (r < 0 || c < 0) {
+                                    setState(() { _selectedValues = null; _selectedRow = null; _selectedCol = null; });
+                                  } else {
+                                    _handleCellSelection(r, c);
+                                  }
                                 },
+                                highlightRow: _selectedRow,
+                                highlightCol: _selectedCol,
                               )
                             : Heatmap2D(
                                 grid: gridData!,
@@ -808,8 +814,14 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                                 optimalRangeOverride: _optimalRangeOverride,
                                 showIndices: true,
                                 onCellTap: (r, c) {
-                                  _handleCellSelection(r, c);
+                                  if (r < 0 || c < 0) {
+                                    setState(() { _selectedValues = null; _selectedRow = null; _selectedCol = null; });
+                                  } else {
+                                    _handleCellSelection(r, c);
+                                  }
                                 },
+                                highlightRow: _selectedRow,
+                                highlightCol: _selectedCol,
                               ))
                         : const Center(
                             child: Text("No data to display for the selected metric and time range."),
