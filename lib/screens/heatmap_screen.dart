@@ -37,6 +37,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     'N',
     'P',
     'K',
+    'Plant Status',
     'All'
   ];
   String currentMetric = 'All';
@@ -66,12 +67,13 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       try {
         final saved = context.read<AppSettings>().selectedMetrics;
         setState(() {
-          selectedMetrics = saved.isNotEmpty ? saved : metrics.where((m) => m != 'All').toSet();
+          final base = metrics.where((m) => m != 'All' && m != 'Plant Status').toSet();
+          selectedMetrics = saved.isNotEmpty ? saved : base;
         });
         _updateGridAndValues();
       } catch (_) {
         setState(() {
-          selectedMetrics = metrics.where((m) => m != 'All').toSet();
+          selectedMetrics = metrics.where((m) => m != 'All' && m != 'Plant Status').toSet();
         });
       }
     });
@@ -126,6 +128,9 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         'N': (parsed['N']?[i] as double?)?.toDouble() ?? double.nan,
         'P': (parsed['P']?[i] as double?)?.toDouble() ?? double.nan,
         'K': (parsed['K']?[i] as double?)?.toDouble() ?? double.nan,
+        // Encode plant status if present
+        if ((parsed['plant_status']?.length ?? 0) > i)
+          'Plant Status': encodePlantStatus(parsed['plant_status']![i]?.toString() ?? '').toDouble(),
       };
       pts.add(HeatmapPoint(
         x: lonToX[lon] ?? 0,
@@ -162,6 +167,9 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         'N': (i < provider.n.length) ? provider.n[i] : double.nan,
         'P': (i < provider.p.length) ? provider.p[i] : double.nan,
         'K': (i < provider.k.length) ? provider.k[i] : double.nan,
+        'Plant Status': (i < provider.plantStatus.length)
+            ? encodePlantStatus(provider.plantStatus[i]).toDouble()
+            : double.nan,
       };
       pts.add(HeatmapPoint(
         x: lonToX[lon] ?? 0,
@@ -457,7 +465,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     }
   }
 
-  bool get _areAllSelected => selectedMetrics.length == metrics.where((m) => m != 'All').length;
+  bool get _areAllSelected => selectedMetrics.length == metrics.where((m) => m != 'All' && m != 'Plant Status').length;
 
   void _toggleSelectAll() {
     setState(() {
@@ -466,7 +474,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         selectedMetrics.clear();
       } else {
         // Select all base metrics
-        selectedMetrics = metrics.where((m) => m != 'All').toSet();
+        selectedMetrics = metrics.where((m) => m != 'All' && m != 'Plant Status').toSet();
       }
       currentMetric = selectedMetrics.length == 1 ? selectedMetrics.first : 'All';
       if (is3DView) {
@@ -646,19 +654,26 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                   ),
                   const SizedBox(height: 8),
                   if (gridData != null && gridData!.isNotEmpty)
-                    SizedBox(
-                      height: 36,
-                      child: HeatmapLegend(
-                        minValue: minValue,
-                        maxValue: maxValue,
-                        metricLabel: selectedMetrics.length == 1 ? selectedMetrics.first : 'Average',
-                        isDark: isDark,
-                        axis: Axis.horizontal,
-                        thickness: 14,
-                        gradientMode: GradientMode.valueBased,
-                        optimalRangeOverride: _optimalRangeOverride,
-                      ),
-                    ),
+                    Builder(builder: (context) {
+                      final String label = selectedMetrics.length == 1 ? selectedMetrics.first : 'Average';
+                      // Hide numeric legend for categorical Plant Status
+                      if (label == 'Plant Status') {
+                        return const SizedBox(height: 8);
+                      }
+                      return SizedBox(
+                        height: 36,
+                        child: HeatmapLegend(
+                          minValue: minValue,
+                          maxValue: maxValue,
+                          metricLabel: label,
+                          isDark: isDark,
+                          axis: Axis.horizontal,
+                          thickness: 14,
+                          gradientMode: GradientMode.valueBased,
+                          optimalRangeOverride: _optimalRangeOverride,
+                        ),
+                      );
+                    }),
                   if (gridData != null && gridData!.isNotEmpty)
                     const SizedBox(height: 8),
                   Expanded(
