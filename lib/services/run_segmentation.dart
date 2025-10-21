@@ -31,127 +31,74 @@ class RunSummary {
 }
 
 class RunSegmentationService {
-  // Main API: segment runs using spatial/temporal heuristics
+  // Time-based segmentation: split runs when consecutive timestamps exceed timeGapThreshold
   static List<RunSegment> segmentRuns({
     required List<DateTime> timestamps,
     required List<double> lats,
     required List<double> lons,
-    Duration maxGap = const Duration(minutes: 12),
+    Duration timeGapThreshold = const Duration(hours: 1),
   }) {
     final int n = math.min(timestamps.length, math.min(lats.length, lons.length));
     if (n == 0) return const [];
 
-    // Compute step distances (degrees). Guard against NaNs.
-    final List<double> steps = <double>[];
-    for (int i = 1; i < n; i++) {
-      final double aLat = lats[i - 1];
-      final double aLon = lons[i - 1];
-      final double bLat = lats[i];
-      final double bLon = lons[i];
-      if (!_isFinite(aLat) || !_isFinite(aLon) || !_isFinite(bLat) || !_isFinite(bLon)) {
-        steps.add(0);
-        continue;
-      }
-      steps.add(_hypot(bLat - aLat, bLon - aLon));
-    }
-
-    final double medianStep = _median(steps.where((v) => v.isFinite && v > 0).toList());
-    // Dynamic thresholds
-    final double base = medianStep.isFinite && medianStep > 0 ? medianStep : 0.00015; // ~17m
-    final double largeJumpThreshold = base * 10; // "farther than normal"
-    final double returnRadius = base * 2.5; // near starting stop
-
     final List<RunSegment> runs = [];
     int runStart = 0;
-    double startLat = lats[0];
-    double startLon = lons[0];
-    bool movedAwayFromStart = false;
-    double minLat = startLat, maxLat = startLat, minLon = startLon, maxLon = startLon;
+    double minLat = lats[0];
+    double maxLat = lats[0];
+    double minLon = lons[0];
+    double maxLon = lons[0];
+
+    double _minLat = _isFinite(minLat) ? minLat : double.infinity;
+    double _maxLat = _isFinite(maxLat) ? maxLat : -double.infinity;
+    double _minLon = _isFinite(minLon) ? minLon : double.infinity;
+    double _maxLon = _isFinite(maxLon) ? maxLon : -double.infinity;
+
+    void commitRun(int endIndex) {
+      // Ensure bounds include last point in the run
+      for (int j = runStart; j <= endIndex; j++) {
+        final a = lats[j];
+        final b = lons[j];
+        if (_isFinite(a)) {
+          if (a < _minLat) _minLat = a;
+          if (a > _maxLat) _maxLat = a;
+        }
+        if (_isFinite(b)) {
+          if (b < _minLon) _minLon = b;
+          if (b > _maxLon) _maxLon = b;
+        }
+      }
+      final seg = RunSegment(
+        startIndex: runStart,
+        endIndex: endIndex,
+        startTime: timestamps[runStart],
+        endTime: timestamps[endIndex],
+        minLat: _minLat.isFinite ? _minLat : 0,
+        maxLat: _maxLat.isFinite ? _maxLat : 0,
+        minLon: _minLon.isFinite ? _minLon : 0,
+        maxLon: _maxLon.isFinite ? _maxLon : 0,
+      );
+      runs.add(seg);
+
+      // Reset for next run
+      if (endIndex + 1 < n) {
+        runStart = endIndex + 1;
+        _minLat = double.infinity;
+        _maxLat = -double.infinity;
+        _minLon = double.infinity;
+        _maxLon = -double.infinity;
+      }
+    }
 
     for (int i = 1; i < n; i++) {
-      // Bounds tracking
-      if (_isFinite(lats[i]) && _isFinite(lons[i])) {
-        if (lats[i] < minLat) minLat = lats[i];
-        if (lats[i] > maxLat) maxLat = lats[i];
-        if (lons[i] < minLon) minLon = lons[i];
-        if (lons[i] > maxLon) maxLon = lons[i];
-      }
-
-      final bool bigTimeGap = timestamps[i].difference(timestamps[i - 1]).abs() > maxGap;
-      final double step = steps[i - 1].isFinite ? steps[i - 1] : 0.0;
-
-      // Heuristic A: large spatial jump -> start new run at i
-      if (step > largeJumpThreshold || bigTimeGap) {
-        runs.add(RunSegment(
-          startIndex: runStart,
-          endIndex: i - 1,
-          startTime: timestamps[runStart],
-          endTime: timestamps[i - 1],
-          minLat: minLat,
-          maxLat: maxLat,
-          minLon: minLon,
-          maxLon: maxLon,
-        ));
-        // reset
-        runStart = i;
-        startLat = lats[i];
-        startLon = lons[i];
-        movedAwayFromStart = false;
-        minLat = startLat; maxLat = startLat; minLon = startLon; maxLon = startLon;
-        continue;
-      }
-
-      // Track if we have moved away sufficiently from the start
-      final double distFromStart = _hypot(lats[i] - startLat, lons[i] - startLon);
-      if (distFromStart > base * 4) {
-        movedAwayFromStart = true;
-      }
-
-      // Heuristic B: returned close to the starting point after moving away -> new run
-      if (movedAwayFromStart && distFromStart <= returnRadius && (i - runStart) >= 8) {
-        runs.add(RunSegment(
-          startIndex: runStart,
-          endIndex: i - 1,
-          startTime: timestamps[runStart],
-          endTime: timestamps[i - 1],
-          minLat: minLat,
-          maxLat: maxLat,
-          minLon: minLon,
-          maxLon: maxLon,
-        ));
-        runStart = i;
-        startLat = lats[i];
-        startLon = lons[i];
-        movedAwayFromStart = false;
-        minLat = startLat; maxLat = startLat; minLon = startLon; maxLon = startLon;
+      final gap = timestamps[i].difference(timestamps[i - 1]).abs();
+      if (gap > timeGapThreshold) {
+        // End current run at i-1
+        commitRun(i - 1);
       }
     }
 
-    // close last run
-    double lastMinLat = minLat;
-    double lastMaxLat = maxLat;
-    double lastMinLon = minLon;
-    double lastMaxLon = maxLon;
-    for (int i = runStart; i < n; i++) {
-      if (_isFinite(lats[i])) {
-        if (lats[i] < lastMinLat) lastMinLat = lats[i];
-        if (lats[i] > lastMaxLat) lastMaxLat = lats[i];
-      }
-      if (_isFinite(lons[i])) {
-        if (lons[i] < lastMinLon) lastMinLon = lons[i];
-        if (lons[i] > lastMaxLon) lastMaxLon = lons[i];
-      }
-    }
-    runs.add(RunSegment(
-      startIndex: runStart,
-      endIndex: n - 1,
-      startTime: timestamps[runStart],
-      endTime: timestamps[n - 1],
-      minLat: lastMinLat,
-      maxLat: lastMaxLat,
-      minLon: lastMinLon,
-      maxLon: lastMaxLon,
-    ));
+    // Close last run
+    commitRun(n - 1);
 
     // Remove degenerate runs with < 3 points if there are other runs
     final filtered = runs.where((r) => (r.endIndex - r.startIndex + 1) >= 3 || runs.length == 1).toList();
