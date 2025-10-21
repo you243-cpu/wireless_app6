@@ -6,6 +6,7 @@ import '../widgets/multi_line_chart.dart';
 import '../providers/csv_data_provider.dart';
 import '../services/heatmap_service.dart';
 import '../widgets/plant_status_legend.dart';
+import '../services/run_segmentation.dart';
 
 class GraphScreen extends StatefulWidget {
   const GraphScreen({super.key});
@@ -18,13 +19,13 @@ class _GraphScreenState extends State<GraphScreen> {
   // Start more zoomed-in by default to avoid clutter.
   double zoomLevel = 3;
   int scrollIndex = 0;
+  int _dataLength = 0; // number of x-points (runs)
 
   void zoomIn() => setState(() { if (zoomLevel < 5) zoomLevel += 1; });
   void zoomOut() => setState(() { if (zoomLevel > 1) zoomLevel -= 1; });
   void scrollLeft() => setState(() { if (scrollIndex > 0) scrollIndex--; });
   void scrollRight() {
-    final provider = context.read<CSVDataProvider>();
-    if (scrollIndex < provider.timestamps.length - 10) scrollIndex++;
+    if (scrollIndex < _dataLength - 10) scrollIndex++;
     setState(() {});
   }
 
@@ -43,6 +44,48 @@ class _GraphScreenState extends State<GraphScreen> {
       );
     }
 
+    // Compute run segmentation and per-run averages
+    final segments = RunSegmentationService.segmentRuns(
+      timestamps: provider.timestamps,
+      lats: provider.latitudes,
+      lons: provider.longitudes,
+    );
+    final summaries = RunSegmentationService.summarizeRuns(provider: provider, segments: segments);
+    final runTimestamps = segments.map((s) => s.startTime).toList();
+    _dataLength = runTimestamps.length;
+
+    List<double> perRunAvg(List<double> series) {
+      final List<double> out = [];
+      for (final seg in segments) {
+        double sum = 0.0;
+        int count = 0;
+        final int s = seg.startIndex;
+        final int e = seg.endIndex;
+        for (int i = s; i <= e && i < series.length; i++) {
+          final v = series[i];
+          if (v.isFinite) { sum += v; count++; }
+        }
+        out.add(count == 0 ? double.nan : (sum / count));
+      }
+      return out;
+    }
+
+    // Build per-run average series for each metric
+    final pHPerRun = RunSegmentationService.averagesForMetric(summaries, 'pH');
+    final nPerRun = RunSegmentationService.averagesForMetric(summaries, 'N');
+    final pPerRun = RunSegmentationService.averagesForMetric(summaries, 'P');
+    final kPerRun = RunSegmentationService.averagesForMetric(summaries, 'K');
+    final temperaturePerRun = RunSegmentationService.averagesForMetric(summaries, 'Temperature');
+    final humidityPerRun = RunSegmentationService.averagesForMetric(summaries, 'Humidity');
+    final ecPerRun = RunSegmentationService.averagesForMetric(summaries, 'EC');
+
+    // Plant status encoded and averaged per run
+    final List<double> encodedStatus = List<double>.generate(
+      provider.timestamps.length,
+      (i) => i < provider.plantStatus.length ? encodePlantStatus(provider.plantStatus[i]).toDouble() : double.nan,
+    );
+    final statusPerRun = perRunAvg(encodedStatus);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("📊 Graphs"),
@@ -59,6 +102,15 @@ class _GraphScreenState extends State<GraphScreen> {
               IconButton(onPressed: scrollLeft, icon: Icon(Icons.arrow_left, color: iconColor)),
               IconButton(onPressed: scrollRight, icon: Icon(Icons.arrow_right, color: iconColor)),
             ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4.0),
+            child: Text(
+              'Showing per-run averages',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: isDark ? Colors.white70 : Colors.black87,
+                  ),
+            ),
           ),
           Expanded(
             child: DefaultTabController(
@@ -87,58 +139,58 @@ class _GraphScreenState extends State<GraphScreen> {
                       physics: const NeverScrollableScrollPhysics(),
                       children: [
                         LineChartWidget(
-                          data: provider.pH,
+                          data: pHPerRun,
                           color: Colors.green,
                           label: "pH",
-                          timestamps: provider.timestamps,
+                          timestamps: runTimestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: provider.n,
+                          data: nPerRun,
                           color: Colors.blue,
                           label: "N",
-                          timestamps: provider.timestamps,
+                          timestamps: runTimestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: provider.p,
+                          data: pPerRun,
                           color: Colors.orange,
                           label: "P",
-                          timestamps: provider.timestamps,
+                          timestamps: runTimestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: provider.k,
+                          data: kPerRun,
                           color: Colors.purple,
                           label: "K",
-                          timestamps: provider.timestamps,
+                          timestamps: runTimestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: provider.temperature,
+                          data: temperaturePerRun,
                           color: Colors.red,
                           label: "Temperature",
-                          timestamps: provider.timestamps,
+                          timestamps: runTimestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: provider.humidity,
+                          data: humidityPerRun,
                           color: Colors.cyan,
                           label: "Humidity",
-                          timestamps: provider.timestamps,
+                          timestamps: runTimestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
                         LineChartWidget(
-                          data: provider.ec,
+                          data: ecPerRun,
                           color: Colors.indigo,
                           label: "EC",
-                          timestamps: provider.timestamps,
+                          timestamps: runTimestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),
@@ -149,15 +201,10 @@ class _GraphScreenState extends State<GraphScreen> {
                             const PlantStatusLegend(axis: Axis.horizontal, isDense: true, numericOnly: false),
                             Expanded(
                               child: LineChartWidget(
-                                data: List<double>.generate(
-                                  provider.timestamps.length,
-                                  (i) => i < provider.plantStatus.length
-                                      ? encodePlantStatus(provider.plantStatus[i]).toDouble()
-                                      : 0.0,
-                                ),
+                                data: statusPerRun,
                                 color: Colors.teal,
                                 label: "Plant Status (count or No Turmeric)",
-                                timestamps: provider.timestamps,
+                                timestamps: runTimestamps,
                                 zoomLevel: zoomLevel,
                                 scrollIndex: scrollIndex,
                               ),
@@ -165,14 +212,14 @@ class _GraphScreenState extends State<GraphScreen> {
                           ],
                         ),
                         MultiLineChartWidget(
-                          pHData: provider.pH,
-                          nData: provider.n,
-                          pData: provider.p,
-                          kData: provider.k,
-                          temperatureData: provider.temperature,
-                          humidityData: provider.humidity,
-                          ecData: provider.ec,
-                          timestamps: provider.timestamps,
+                          pHData: pHPerRun,
+                          nData: nPerRun,
+                          pData: pPerRun,
+                          kData: kPerRun,
+                          temperatureData: temperaturePerRun,
+                          humidityData: humidityPerRun,
+                          ecData: ecPerRun,
+                          timestamps: runTimestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                         ),

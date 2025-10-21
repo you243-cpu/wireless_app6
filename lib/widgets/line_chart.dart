@@ -41,8 +41,9 @@ class LineChartWidget extends StatelessWidget {
     final shownTimestamps = timestamps.sublist(start, end);
 
     // Compute a comfortable Y-range with padding for readability
-    double minY = shownData.reduce(math.min);
-    double maxY = shownData.reduce(math.max);
+    final finiteValues = shownData.where((v) => v.isFinite).toList();
+    double minY = finiteValues.isNotEmpty ? finiteValues.reduce(math.min) : 0.0;
+    double maxY = finiteValues.isNotEmpty ? finiteValues.reduce(math.max) : 1.0;
     if (minY == maxY) {
       // Avoid a flat line occupying the border
       minY -= 1;
@@ -185,10 +186,10 @@ class LineChartWidget extends StatelessWidget {
                             ),
                             lineBarsData: [
                               LineChartBarData(
-                                spots: List.generate(
-                                  shownData.length,
-                                  (i) => FlSpot(i.toDouble(), shownData[i]),
-                                ),
+                                spots: [
+                                  for (int i = 0; i < shownData.length; i++)
+                                    if (shownData[i].isFinite) FlSpot(i.toDouble(), shownData[i]),
+                                ],
                                 isCurved: true,
                                 color: color,
                                 barWidth: 2,

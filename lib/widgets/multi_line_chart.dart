@@ -68,9 +68,10 @@ class MultiLineChartWidget extends StatelessWidget {
     double minY = double.infinity;
     double maxY = -double.infinity;
     for (final series in visibleSeries) {
-      if (series.isEmpty) continue;
-      minY = math.min(minY, series.reduce(math.min));
-      maxY = math.max(maxY, series.reduce(math.max));
+      final finite = series.where((v) => v.isFinite).toList();
+      if (finite.isEmpty) continue;
+      minY = math.min(minY, finite.reduce(math.min));
+      maxY = math.max(maxY, finite.reduce(math.max));
     }
     if (!minY.isFinite || !maxY.isFinite) {
       minY = 0;
@@ -235,7 +236,10 @@ class MultiLineChartWidget extends StatelessWidget {
 
   LineChartBarData _buildLine(List<double> values, Color color) {
     return LineChartBarData(
-      spots: List.generate(values.length, (i) => FlSpot(i.toDouble(), values[i])),
+      spots: [
+        for (int i = 0; i < values.length; i++)
+          if (values[i].isFinite) FlSpot(i.toDouble(), values[i])
+      ],
       isCurved: true,
       color: color,
       barWidth: 2,
