@@ -18,6 +18,7 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/app_settings.dart';
 import '../providers/csv_data_provider.dart';
+import '../services/run_segmentation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
@@ -65,6 +66,9 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   String? gltfModelPath;
   Key _modelViewerKey = UniqueKey();
   List<double>? _optimalRangeOverride; // averaged optimal range when selecting multiple metrics
+  // Run selection state
+  List<RunSegment> _runs = const [];
+  int _selectedRunIndex = -1; // -1 means full range
 
   @override
   void initState() {
@@ -98,8 +102,21 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         final points = _pointsFromProvider(provider);
         heatmapService.setPoints(points);
         setState(() {
-          startTime = provider.timestamps.reduce((a, b) => a.isBefore(b) ? a : b);
-          endTime = provider.timestamps.reduce((a, b) => a.isAfter(b) ? a : b);
+          _runs = RunSegmentationService.segmentRuns(
+            timestamps: provider.timestamps,
+            lats: provider.latitudes,
+            lons: provider.longitudes,
+          );
+          // Default to latest run if available
+          if (_runs.isNotEmpty) {
+            _selectedRunIndex = _runs.length - 1;
+            startTime = _runs[_selectedRunIndex].startTime;
+            endTime = _runs[_selectedRunIndex].endTime;
+          } else {
+            startTime = provider.timestamps.reduce((a, b) => a.isBefore(b) ? a : b);
+            endTime = provider.timestamps.reduce((a, b) => a.isAfter(b) ? a : b);
+            _selectedRunIndex = -1;
+          }
           currentMetric = 'All';
           isLoading = false;
           _lastKeySeed = provider.sourceKey;
@@ -328,8 +345,20 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         heatmapService.setPoints(points);
         if (!mounted) return;
         setState(() {
-          startTime = provider.timestamps.reduce((a, b) => a.isBefore(b) ? a : b);
-          endTime = provider.timestamps.reduce((a, b) => a.isAfter(b) ? a : b);
+          _runs = RunSegmentationService.segmentRuns(
+            timestamps: provider.timestamps,
+            lats: provider.latitudes,
+            lons: provider.longitudes,
+          );
+          if (_runs.isNotEmpty) {
+            _selectedRunIndex = _runs.length - 1; // default latest run
+            startTime = _runs[_selectedRunIndex].startTime;
+            endTime = _runs[_selectedRunIndex].endTime;
+          } else {
+            startTime = provider.timestamps.reduce((a, b) => a.isBefore(b) ? a : b);
+            endTime = provider.timestamps.reduce((a, b) => a.isAfter(b) ? a : b);
+            _selectedRunIndex = -1;
+          }
           currentMetric = 'All';
           isLoading = false;
           _lastKeySeed = provider.sourceKey;
@@ -360,6 +389,8 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         setState(() {
           startTime = minT;
           endTime = maxT;
+          _runs = const [];
+          _selectedRunIndex = -1;
           // Start with 'All' to ensure visibility by default
           currentMetric = 'All';
           isLoading = false;
@@ -735,6 +766,11 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         backgroundColor: isDark ? Colors.grey[800] : Colors.blue,
         actions: [
           IconButton(
+            icon: const Icon(Icons.timeline),
+            tooltip: 'Select Run',
+            onPressed: _showRunsDialog,
+          ),
+          IconButton(
             icon: Icon(is3DView ? Icons.view_agenda : Icons.view_in_ar),
             onPressed: _toggleView,
             tooltip: 'Toggle 2D/3D View',
@@ -767,7 +803,9 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                     icon: const Icon(Icons.date_range),
                     label: Text(
                       startTime != null && endTime != null
-                          ? 'Viewing Data from ${startTime!.toString().split('.')[0]} to ${endTime!.toString().split('.')[0]}'
+                          ? (_selectedRunIndex >= 0
+                              ? 'Run ${_selectedRunIndex + 1}: ${startTime!.toString().split('.')[0]} - ${endTime!.toString().split('.')[0]}'
+                              : 'Viewing Data from ${startTime!.toString().split('.')[0]} to ${endTime!.toString().split('.')[0]}')
                           : 'Select Date & Time Range',
                       style: const TextStyle(fontSize: 12),
                     ),
@@ -1027,6 +1065,127 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
           ],
         );
       },
+    );
+  }
+
+  Future<void> _showRunsDialog() async {
+    final provider = context.read<CSVDataProvider>();
+    if (!provider.hasData) return;
+    if (_runs.isEmpty) {
+      setState(() { _runs = RunSegmentationService.segmentRuns(
+        timestamps: provider.timestamps,
+        lats: provider.latitudes,
+        lons: provider.longitudes,
+      ); });
+    }
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Select Run'),
+          content: SizedBox(
+            width: 420,
+            child: _runs.isEmpty
+                ? const Text('No runs detected')
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _runs.length,
+                    itemBuilder: (context, index) {
+                      final run = _runs[index];
+                      final subtitle = '${run.startTime.toString().split('.')[0]} — ${run.endTime.toString().split('.')[0]}\n'
+                          'lat ${run.minLat.toStringAsFixed(5)}..${run.maxLat.toStringAsFixed(5)}, '
+                          'lon ${run.minLon.toStringAsFixed(5)}..${run.maxLon.toStringAsFixed(5)}';
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _selectedRunIndex = index;
+                              startTime = run.startTime;
+                              endTime = run.endTime;
+                            });
+                            _updateGridAndValues();
+                            Navigator.of(ctx).pop();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    CircleAvatar(child: Text('${index + 1}')),
+                                    const SizedBox(width: 8),
+                                    Text('Run ${index + 1}', style: Theme.of(context).textTheme.titleMedium),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                                const SizedBox(height: 8),
+                                _buildRunPreview(run),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () { Navigator.of(ctx).pop(); },
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildRunPreview(RunSegment run) {
+    // Build a small grid for this run
+    HeatmapGrid heatmapData;
+    if (selectedMetrics.isNotEmpty && selectedMetrics.length > 1) {
+      heatmapData = heatmapService.createUniformGridFromLatLonForMetrics(
+        metrics: selectedMetrics.toList(),
+        start: run.startTime,
+        end: run.endTime,
+        targetCols: 32,
+        targetRows: 32,
+      );
+    } else {
+      final metricToUse = selectedMetrics.isNotEmpty ? selectedMetrics.first : currentMetric;
+      heatmapData = heatmapService.createUniformGridFromLatLon(
+        metric: metricToUse,
+        start: run.startTime,
+        end: run.endTime,
+        targetCols: 32,
+        targetRows: 32,
+      );
+    }
+    final grid = heatmapData.grid;
+    final values = grid.expand((r) => r).where((v) => v.isFinite).toList();
+    double minV = 0, maxV = 1;
+    if (values.isNotEmpty) {
+      minV = values.reduce((a, b) => a < b ? a : b);
+      maxV = values.reduce((a, b) => a > b ? a : b);
+      if (minV == maxV) { minV -= 0.01; maxV += 0.01; }
+    }
+    final label = selectedMetrics.length == 1 ? selectedMetrics.first : 'Average';
+    return SizedBox(
+      height: 120,
+      child: Heatmap2D(
+        grid: grid,
+        geographicWidthRatio: heatmapData.widthRatio,
+        metricLabel: label,
+        minValue: minV,
+        maxValue: maxV,
+        optimalRangeOverride: selectedMetrics.length > 1
+            ? heatmapService.averageOptimalRange(selectedMetrics.toList())
+            : null,
+        showIndices: false,
+        showGridLines: false,
+      ),
     );
   }
 }
