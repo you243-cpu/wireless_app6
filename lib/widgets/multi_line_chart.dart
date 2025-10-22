@@ -38,7 +38,7 @@ class MultiLineChartWidget extends StatelessWidget {
     final axisColor = isDark ? Colors.white70 : Colors.black87;
     final gridColor = isDark ? Colors.white24 : Colors.black26;
 
-    int visibleCount = (timestamps.length ~/ zoomLevel).clamp(6, timestamps.length);
+    int visibleCount = (timestamps.length ~/ zoomLevel).clamp(1, timestamps.length);
     int start = scrollIndex.clamp(0, (timestamps.length - visibleCount).clamp(0, timestamps.length));
     int end = (start + visibleCount).clamp(0, timestamps.length);
 
@@ -143,26 +143,24 @@ class MultiLineChartWidget extends StatelessWidget {
                               getDrawingVerticalLine: (_) => FlLine(color: gridColor, strokeWidth: 0.6),
                             ),
                             titlesData: FlTitlesData(
-                              bottomTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                  showTitles: true,
-                                  reservedSize: 24,
-                                  interval: (shownTimestamps.length / 6)
-                                      .floorToDouble()
-                                      .clamp(1, shownTimestamps.length.toDouble()),
-                                  getTitlesWidget: (value, meta) {
-                                    int index = value.toInt();
-                                    if (index < 0 || index >= shownTimestamps.length) {
-                                      return const SizedBox.shrink();
-                                    }
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 24,
+                                interval: shownTimestamps.isEmpty ? 1 : (shownTimestamps.length <= 6 ? 1 : (shownTimestamps.length / 6).floorToDouble()),
+                                getTitlesWidget: (value, meta) {
+                                  int index = value.toInt();
+                                  if (index < 0 || index >= shownTimestamps.length) {
+                                    return const SizedBox.shrink();
+                                  }
                                   final dt = shownTimestamps[index];
                                   return Text(
                                     timeFmt.format(dt),
                                     style: TextStyle(fontSize: 10, color: axisColor),
                                   );
-                                  },
-                                ),
+                                },
                               ),
+                            ),
                               leftTitles: AxisTitles(
                                 sideTitles: SideTitles(
                                   showTitles: true,

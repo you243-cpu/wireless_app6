@@ -100,9 +100,8 @@ class RunSegmentationService {
     // Close last run
     commitRun(n - 1);
 
-    // Remove degenerate runs with < 3 points if there are other runs
-    final filtered = runs.where((r) => (r.endIndex - r.startIndex + 1) >= 3 || runs.length == 1).toList();
-    return filtered;
+    // Return all runs, even short ones. Some datasets have brief runs.
+    return runs;
   }
 
   static List<RunSummary> summarizeRuns({required CSVDataProvider provider, required List<RunSegment> segments}) {
