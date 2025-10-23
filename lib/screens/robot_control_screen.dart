@@ -555,45 +555,44 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     final Color appBarColor = Colors.teal.shade800;
 
     final Widget bodyContent = _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _isPlaybackActive
-              ? _buildPlaybackStatus()
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        _buildRecordingPanel(),
-                        const SizedBox(height: 30),
+        ? const Center(child: CircularProgressIndicator())
+        : _isPlaybackActive
+            ? _buildPlaybackStatus()
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(20.0),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      _buildRecordingPanel(),
+                      const SizedBox(height: 30),
 
-                        Text(
-                          "Directional Controls",
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: primaryColor),
-                        ),
-                        const Divider(height: 20, thickness: 2, indent: 50, endIndent: 50),
-                        _buildDpad(context),
-                        const SizedBox(height: 60),
+                      Text(
+                        "Directional Controls",
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: primaryColor),
+                      ),
+                      const Divider(height: 20, thickness: 2, indent: 50, endIndent: 50),
+                      _buildDpad(context),
+                      const SizedBox(height: 60),
 
-                        Text(
-                          "Action Commands",
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: primaryColor),
-                        ),
-                        const Divider(height: 20, thickness: 2, indent: 50, endIndent: 50),
-                        _buildActionButtons(context),
-                        const SizedBox(height: 40),
+                      Text(
+                        "Action Commands",
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: primaryColor),
+                      ),
+                      const Divider(height: 20, thickness: 2, indent: 50, endIndent: 50),
+                      _buildActionButtons(context),
+                      const SizedBox(height: 40),
 
-                        TextButton.icon(
-                          icon: const Icon(Icons.refresh, color: Colors.grey),
-                          label: const Text("Restore Default Controls", style: TextStyle(color: Colors.grey)),
-                          onPressed: () => _confirmReset(context),
-                        ),
-                      ],
-                    ),
+                      TextButton.icon(
+                        icon: const Icon(Icons.refresh, color: Colors.grey),
+                        label: const Text("Restore Default Controls", style: TextStyle(color: Colors.grey)),
+                        onPressed: () => _confirmReset(context),
+                      ),
+                    ],
                   ),
                 ),
-    );
+              );
 
     if (widget.embedded) return bodyContent;
 
