@@ -9,7 +9,7 @@ void main() {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => CSVDataProvider()),
-        ChangeNotifierProvider(create: (_) => AppSettings()),
+        ChangeNotifierProvider(create: (_) => AppSettings()..load()),
       ],
       child: MyApp(),
     ),
@@ -22,14 +22,38 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: themeNotifier,
-      builder: (context, currentMode, _) {
+    // Defer theme rebuilding to AppSettings to allow persisted seed color & mode
+    return Consumer<AppSettings>(
+      builder: (context, settings, _) {
+        // Keep ValueNotifier in sync so existing toggles continue to work
+        themeNotifier.value = settings.themeMode;
+        final Color seed = settings.seedColor;
+        final ThemeData light = ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.light),
+          useMaterial3: true,
+          snackBarTheme: SnackBarThemeData(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: seed.withOpacity(0.12),
+            contentTextStyle: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        );
+        final ThemeData dark = ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.dark),
+          useMaterial3: true,
+          snackBarTheme: SnackBarThemeData(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.black87,
+            contentTextStyle: TextStyle(color: seed, fontWeight: FontWeight.w600),
+          ),
+          scaffoldBackgroundColor: Colors.black,
+          appBarTheme: const AppBarTheme(backgroundColor: Colors.black, foregroundColor: Colors.white),
+        );
+
         return MaterialApp(
           title: 'Soil Dashboard',
-          theme: ThemeData.light(),
-          darkTheme: ThemeData.dark(),
-          themeMode: currentMode,
+          theme: light,
+          darkTheme: dark,
+          themeMode: settings.themeMode,
           home: const DashboardScreen(),
         );
       },
