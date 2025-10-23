@@ -8,10 +8,9 @@ class AppSettings extends ChangeNotifier {
   // Advanced segmentation/grouping settings
   int _timeGapMinutes = 60; // split runs when gap > minutes
   bool _enableFarmGrouping = true;
-  bool _enableRerunDetection = true;
   double _farmCentroidThresholdMeters = 160.0; // cluster centroid proximity
   double _bboxIoUThreshold = 0.5; // overlap threshold
-  double _endpointNearMeters = 90.0; // reversed endpoints proximity
+  // rerun detection removed
 
   String get saveDirectory => _saveDirectory;
   Set<String> get selectedMetrics => _selectedMetrics;
@@ -19,10 +18,9 @@ class AppSettings extends ChangeNotifier {
 
   int get timeGapMinutes => _timeGapMinutes;
   bool get enableFarmGrouping => _enableFarmGrouping;
-  bool get enableRerunDetection => _enableRerunDetection;
   double get farmCentroidThresholdMeters => _farmCentroidThresholdMeters;
   double get bboxIoUThreshold => _bboxIoUThreshold;
-  double get endpointNearMeters => _endpointNearMeters;
+  // endpoint proximity removed
 
   void setSaveDirectory(String dir) {
     _saveDirectory = dir;
@@ -49,10 +47,6 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setEnableRerunDetection(bool value) {
-    _enableRerunDetection = value;
-    notifyListeners();
-  }
 
   void setFarmCentroidThresholdMeters(double meters) {
     _farmCentroidThresholdMeters = meters.clamp(1.0, 5000.0);
@@ -64,8 +58,5 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setEndpointNearMeters(double meters) {
-    _endpointNearMeters = meters.clamp(1.0, 5000.0);
-    notifyListeners();
-  }
+  // removed setter
 }
