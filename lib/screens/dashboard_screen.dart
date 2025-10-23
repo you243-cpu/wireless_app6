@@ -257,6 +257,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   int _currentIndex = 0; // 0: Home, 1: Graph, 2: Heatmap, 3: Robot
+  int? _selectedHomeRunIndex; // for averaging health per selected run
 
   void _showTabSnackBar(int targetIndex) {
     final labels = ['Home', 'Graphs', 'Heatmap', 'Robot'];
@@ -358,6 +359,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Compute last scan range and average soil health per run
     String lastRange = '—';
     double averageHealth = double.nan;
+    String healthScope = 'last sample';
     if (provider.hasData) {
       final segments = RunSegmentationService.segmentRuns(
         timestamps: provider.timestamps,
@@ -379,15 +381,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return (1.0 - (dist / (half * 2.0))).clamp(0.0, 1.0);
       }
 
+      double avgRange(List<double> series, int s, int e) {
+        if (series.isEmpty) return double.nan;
+        final int start = s.clamp(0, series.length - 1);
+        final int end = e.clamp(start, series.length - 1);
+        double sum = 0.0; int count = 0;
+        for (int i = start; i <= end; i++) {
+          final v = series[i];
+          if (v.isFinite) { sum += v; count++; }
+        }
+        return count == 0 ? double.nan : sum / count;
+      }
+
       if (provider.pH.isNotEmpty) {
-        final lastIdx = provider.pH.length - 1;
-        final s = <double>[
-          score(provider.pH[lastIdx], 6.0, 7.5),
-          score(provider.temperature.elementAt(lastIdx.clamp(0, provider.temperature.length - 1)), 20.0, 25.0),
-          score(provider.humidity.elementAt(lastIdx.clamp(0, provider.humidity.length - 1)), 40.0, 60.0),
-          score(provider.ec.elementAt(lastIdx.clamp(0, provider.ec.length - 1)), 1.0, 2.0),
-        ];
-        averageHealth = s.reduce((a,b) => a + b) / s.length;
+        if (_selectedHomeRunIndex != null && segments.isNotEmpty && _selectedHomeRunIndex! >= 0 && _selectedHomeRunIndex! < segments.length) {
+          final sel = segments[_selectedHomeRunIndex!];
+          final pHAvg = avgRange(provider.pH, sel.startIndex, sel.endIndex);
+          final tAvg = avgRange(provider.temperature, sel.startIndex, sel.endIndex);
+          final hAvg = avgRange(provider.humidity, sel.startIndex, sel.endIndex);
+          final ecAvg = avgRange(provider.ec, sel.startIndex, sel.endIndex);
+          final sVals = <double>[
+            score(pHAvg, 6.0, 7.5),
+            score(tAvg, 20.0, 25.0),
+            score(hAvg, 40.0, 60.0),
+            score(ecAvg, 1.0, 2.0),
+          ].where((v) => v.isFinite).toList();
+          if (sVals.isNotEmpty) {
+            averageHealth = sVals.reduce((a, b) => a + b) / sVals.length;
+            healthScope = 'Run ${_selectedHomeRunIndex! + 1} average';
+          }
+        } else {
+          // Average across all runs (entire dataset)
+          final pHAvg = avgRange(provider.pH, 0, provider.pH.length - 1);
+          final tAvg = avgRange(provider.temperature, 0, provider.temperature.length - 1);
+          final hAvg = avgRange(provider.humidity, 0, provider.humidity.length - 1);
+          final ecAvg = avgRange(provider.ec, 0, provider.ec.length - 1);
+          final sVals = <double>[
+            score(pHAvg, 6.0, 7.5),
+            score(tAvg, 20.0, 25.0),
+            score(hAvg, 40.0, 60.0),
+            score(ecAvg, 1.0, 2.0),
+          ].where((v) => v.isFinite).toList();
+          if (sVals.isNotEmpty) {
+            averageHealth = sVals.reduce((a, b) => a + b) / sVals.length;
+            healthScope = 'All runs average';
+          }
+        }
       }
     }
 
@@ -442,7 +481,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: ListTile(
               leading: const Icon(Icons.health_and_safety),
               title: const Text('Average soil health'),
-              subtitle: Text(averageHealth.isFinite ? (averageHealth * 100).toStringAsFixed(0) + '% (last sample)' : '—'),
+              subtitle: Text(averageHealth.isFinite ? (averageHealth * 100).toStringAsFixed(0) + '% ($healthScope)' : '—'),
               trailing: TextButton(
                 onPressed: () => _openRunPicker(provider),
                 child: const Text('Select run'),
@@ -487,18 +526,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const Divider(height: 1),
                 Expanded(
                   child: ListView.builder(
-                    itemCount: runs.length,
+                    itemCount: runs.length + 1,
                     itemBuilder: (c, i) {
-                      final r = runs[i];
+                      if (i == 0) {
+                        return ListTile(
+                          leading: const Icon(Icons.all_inclusive),
+                          title: const Text('All runs'),
+                          subtitle: const Text('Use entire dataset'),
+                          onTap: () {
+                            setState(() { _selectedHomeRunIndex = null; });
+                            Navigator.pop(ctx);
+                          },
+                        );
+                      }
+                      final idx = i - 1;
+                      final r = runs[idx];
                       return ListTile(
                         leading: const Icon(Icons.timeline),
-                        title: Text('Run ${i + 1}'),
+                        title: Text('Run ${idx + 1}'),
                         subtitle: Text('${r.startTime.toString().split('.')[0]} → ${r.endTime.toString().split('.')[0]}'),
                         onTap: () {
+                          setState(() { _selectedHomeRunIndex = idx; });
                           Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Selected Run ${i + 1}')),
-                          );
                         },
                       );
                     },
