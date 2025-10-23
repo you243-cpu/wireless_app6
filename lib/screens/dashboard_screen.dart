@@ -15,6 +15,8 @@ import '../widgets/nutrient_card.dart';
 import 'graph_screen.dart';
 import 'heatmap_screen.dart';
 import 'robot_control_screen.dart'; // Import the new screen
+import '../widgets/metric_tile.dart';
+import '../services/run_segmentation.dart';
 import '../providers/csv_data_provider.dart';
 import 'settings_screen.dart';
 
@@ -254,38 +256,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return const Icon(Icons.brightness_auto);
   }
 
+  int _currentIndex = 0; // 0: Home, 1: Graph, 2: Heatmap, 3: Robot
+  int? _selectedHomeRunIndex; // for averaging health per selected run
+
+  void _showTabSnackBar(int targetIndex) {
+    final labels = ['Home', 'Graphs', 'Heatmap', 'Robot'];
+    final colors = Theme.of(context).colorScheme;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.black87 : colors.primary.withOpacity(0.1),
+        content: Row(
+          children: [
+            Text('Go to ${labels[targetIndex]}?', style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? colors.primary : colors.primary)),
+            const Spacer(),
+            TextButton(
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                setState(() { _currentIndex = targetIndex; });
+              },
+              child: const Text('Switch'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<CSVDataProvider>(
       builder: (context, provider, _) {
+        final pages = <Widget>[
+          _buildHome(provider),
+          const GraphScreen(embedded: true),
+          const HeatmapScreen(embedded: true),
+          const RobotControlScreen(embedded: true),
+        ];
+
         return Scaffold(
           appBar: AppBar(
             title: const Text("🌱 Soil Sensor Dashboard"),
             actions: [
-              IconButton(icon: const Icon(Icons.upload_file), onPressed: pickCsvFile),
-              IconButton(icon: _themeIcon(), onPressed: _toggleTheme),
-              IconButton(
-                icon: const Icon(Icons.show_chart),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const GraphScreen()),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.grid_on),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const HeatmapScreen()),
-                ),
-              ),
-              // New button for the robot control screen
-              IconButton(
-                icon: const Icon(Icons.smart_toy),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const RobotControlScreen()),
-                ),
-              ),
               IconButton(
                 icon: const Icon(Icons.settings),
                 onPressed: () => Navigator.push(
@@ -295,35 +307,288 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+          body: GestureDetector(
+            onHorizontalDragEnd: (details) {
+              final velocity = details.primaryVelocity ?? 0;
+              if (velocity < -200) {
+                // swipe left
+                if (_currentIndex < pages.length - 1) setState(() => _currentIndex++);
+              } else if (velocity > 200) {
+                // swipe right
+                if (_currentIndex > 0) setState(() => _currentIndex--);
+              }
+            },
+            child: PageView(
+              controller: PageController(initialPage: _currentIndex, keepPage: false),
+              onPageChanged: (i) => setState(() { _currentIndex = i; }),
+              children: pages,
+            ),
+          ),
+          bottomNavigationBar: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 10,
+              children: [
+                _snackButton('Home', Icons.home, () => _showTabSnackBar(0)),
+                _snackButton('Graphs', Icons.show_chart, () => _showTabSnackBar(1)),
+                _snackButton('Heatmap', Icons.grid_on, () => _showTabSnackBar(2)),
+                _snackButton('Robot', Icons.smart_toy, () => _showTabSnackBar(3)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _snackButton(String label, IconData icon, VoidCallback onTap) {
+    final cs = Theme.of(context).colorScheme;
+    return ActionChip(
+      avatar: Icon(icon, color: cs.primary),
+      label: Text(label),
+      onPressed: onTap,
+      backgroundColor: cs.surface,
+      side: BorderSide(color: cs.primary.withOpacity(0.2)),
+    );
+  }
+
+  Widget _buildHome(CSVDataProvider provider) {
+    final ColorScheme cs = Theme.of(context).colorScheme;
+
+    // Compute last scan range and average soil health per run
+    String lastRange = '—';
+    double averageHealth = double.nan;
+    String healthScope = 'last sample';
+    if (provider.hasData) {
+      final segments = RunSegmentationService.segmentRuns(
+        timestamps: provider.timestamps,
+        lats: provider.latitudes,
+        lons: provider.longitudes,
+      );
+      if (segments.isNotEmpty) {
+        final last = segments.last;
+        lastRange = '${last.startTime.toString().split('.')[0]} → ${last.endTime.toString().split('.')[0]}';
+      }
+
+      // Simple health score: normalize a few metrics around ideal ranges (0..1)
+      double score(double v, double min, double max) {
+        if (!v.isFinite) return 0.0;
+        if (v >= min && v <= max) return 1.0;
+        final mid = (min + max) / 2.0;
+        final half = (max - min) / 2.0;
+        final dist = (v - mid).abs();
+        return (1.0 - (dist / (half * 2.0))).clamp(0.0, 1.0);
+      }
+
+      double avgRange(List<double> series, int s, int e) {
+        if (series.isEmpty) return double.nan;
+        final int start = s.clamp(0, series.length - 1);
+        final int end = e.clamp(start, series.length - 1);
+        double sum = 0.0; int count = 0;
+        for (int i = start; i <= end; i++) {
+          final v = series[i];
+          if (v.isFinite) { sum += v; count++; }
+        }
+        return count == 0 ? double.nan : sum / count;
+      }
+
+      if (provider.pH.isNotEmpty) {
+        if (_selectedHomeRunIndex != null && segments.isNotEmpty && _selectedHomeRunIndex! >= 0 && _selectedHomeRunIndex! < segments.length) {
+          final sel = segments[_selectedHomeRunIndex!];
+          final pHAvg = avgRange(provider.pH, sel.startIndex, sel.endIndex);
+          final tAvg = avgRange(provider.temperature, sel.startIndex, sel.endIndex);
+          final hAvg = avgRange(provider.humidity, sel.startIndex, sel.endIndex);
+          final ecAvg = avgRange(provider.ec, sel.startIndex, sel.endIndex);
+          final sVals = <double>[
+            score(pHAvg, 6.0, 7.5),
+            score(tAvg, 20.0, 25.0),
+            score(hAvg, 40.0, 60.0),
+            score(ecAvg, 1.0, 2.0),
+          ].where((v) => v.isFinite).toList();
+          if (sVals.isNotEmpty) {
+            averageHealth = sVals.reduce((a, b) => a + b) / sVals.length;
+            healthScope = 'Run ${_selectedHomeRunIndex! + 1} average';
+          }
+        } else {
+          // Average across all runs (entire dataset)
+          final pHAvg = avgRange(provider.pH, 0, provider.pH.length - 1);
+          final tAvg = avgRange(provider.temperature, 0, provider.temperature.length - 1);
+          final hAvg = avgRange(provider.humidity, 0, provider.humidity.length - 1);
+          final ecAvg = avgRange(provider.ec, 0, provider.ec.length - 1);
+          final sVals = <double>[
+            score(pHAvg, 6.0, 7.5),
+            score(tAvg, 20.0, 25.0),
+            score(hAvg, 40.0, 60.0),
+            score(ecAvg, 1.0, 2.0),
+          ].where((v) => v.isFinite).toList();
+          if (sVals.isNotEmpty) {
+            averageHealth = sVals.reduce((a, b) => a + b) / sVals.length;
+            healthScope = 'All runs average';
+          }
+        }
+      }
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          SoilHealthCard(message: AlertService.getAlertMessage(pH)),
+          const SizedBox(height: 12),
+          // Metric widgets grid
+          GridView(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 2.3,
+            ),
+            children: [
+              MetricTile(label: 'pH', value: pH.toStringAsFixed(2), icon: Icons.science, color: cs.primary),
+              MetricTile(label: 'Temperature', value: '${temperature.toStringAsFixed(1)}', unit: '°C', icon: Icons.thermostat, color: Colors.redAccent),
+              MetricTile(label: 'Humidity', value: '${humidity.toStringAsFixed(1)}', unit: '%', icon: Icons.water_drop, color: Colors.cyan),
+              MetricTile(label: 'EC', value: ec.toStringAsFixed(2), unit: 'mS/cm', icon: Icons.bolt, color: Colors.indigo),
+            ],
+          ),
+          const SizedBox(height: 12),
+          GaugesWidget(pH: pH),
+          const SizedBox(height: 12),
+          NutrientCard(
+            N: N,
+            P: P,
+            K: K,
+            plantStatus: (() {
+              if (provider.plantStatus.isNotEmpty) {
+                return provider.plantStatus.last;
+              }
+              return '';
+            })(),
+          ),
+          const SizedBox(height: 12),
+          // Last scan and averages row
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.schedule),
+              title: const Text('Time of last scan'),
+              subtitle: Text(lastRange),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.health_and_safety),
+              title: const Text('Average soil health'),
+              subtitle: Text(averageHealth.isFinite ? (averageHealth * 100).toStringAsFixed(0) + '% ($healthScope)' : '—'),
+              trailing: TextButton(
+                onPressed: () => _openRunPicker(provider),
+                child: const Text('Select run'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _suggestionBox(averageHealth),
+        ],
+      ),
+    );
+  }
+
+  void _openRunPicker(CSVDataProvider provider) {
+    final runs = RunSegmentationService.segmentRuns(
+      timestamps: provider.timestamps,
+      lats: provider.latitudes,
+      lons: provider.longitudes,
+    );
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 420),
             child: Column(
               children: [
-                SoilHealthCard(message: AlertService.getAlertMessage(pH)),
-                const SizedBox(height: 20),
-                GaugesWidget(pH: pH),
-                const SizedBox(height: 20),
-                NutrientCard(
-                  N: N,
-                  P: P,
-                  K: K,
-                  plantStatus: (() {
-                    final provider = context.read<CSVDataProvider>();
-                    if (provider.plantStatus.isNotEmpty) {
-                      return provider.plantStatus.last;
-                    }
-                    return '';
-                  })(),
+                Row(
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.all(12.0),
+                      child: Text('Select a run', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
-                Text(
-                  "🌡️ Temp: $temperature °C    💧 Humidity: $humidity%    ⚡ EC: $ec",
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: runs.length + 1,
+                    itemBuilder: (c, i) {
+                      if (i == 0) {
+                        return ListTile(
+                          leading: const Icon(Icons.all_inclusive),
+                          title: const Text('All runs'),
+                          subtitle: const Text('Use entire dataset'),
+                          onTap: () {
+                            setState(() { _selectedHomeRunIndex = null; });
+                            Navigator.pop(ctx);
+                          },
+                        );
+                      }
+                      final idx = i - 1;
+                      final r = runs[idx];
+                      return ListTile(
+                        leading: const Icon(Icons.timeline),
+                        title: Text('Run ${idx + 1}'),
+                        subtitle: Text('${r.startTime.toString().split('.')[0]} → ${r.endTime.toString().split('.')[0]}'),
+                        onTap: () {
+                          setState(() { _selectedHomeRunIndex = idx; });
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _suggestionBox(double healthScore) {
+    String msg;
+    IconData icon;
+    Color color;
+    if (!healthScore.isFinite) {
+      msg = 'Load data to see farm health suggestions.';
+      icon = Icons.info_outline;
+      color = Colors.grey;
+    } else if (healthScore >= 0.8) {
+      msg = 'Farm health looks great. Maintain current practices.';
+      icon = Icons.thumb_up_alt_outlined;
+      color = Colors.green;
+    } else if (healthScore >= 0.5) {
+      msg = 'Moderate health. Consider mild fertilization and watering checks.';
+      icon = Icons.tips_and_updates_outlined;
+      color = Colors.amber;
+    } else {
+      msg = 'Low health. Review pH, nutrients, and irrigation urgently.';
+      icon = Icons.warning_amber_rounded;
+      color = Colors.redAccent;
+    }
+
+    return Card(
+      child: ListTile(
+        leading: Icon(icon, color: color),
+        title: const Text('Farm health summary'),
+        subtitle: Text(msg),
+      ),
     );
   }
 }
