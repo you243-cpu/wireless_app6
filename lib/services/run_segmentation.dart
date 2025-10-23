@@ -256,38 +256,8 @@ class RunSegmentationService {
       }
     }
 
-    // Mark reruns within each farm (reverse endpoints and high bbox overlap)
-    for (final f in farms) {
-      final indices = [...f.runIndices]..sort((a, b) => updated[a].startTime.compareTo(updated[b].startTime));
-      for (int k = 1; k < indices.length; k++) {
-        final prevIdx = indices[k - 1];
-        final curIdx = indices[k];
-        final a = updated[prevIdx];
-        final b = updated[curIdx];
-        final (aStartLat, aStartLon) = _startPoint(a, lats, lons);
-        final (aEndLat, aEndLon) = _endPoint(a, lats, lons);
-        final (bStartLat, bStartLon) = _startPoint(b, lats, lons);
-        final (bEndLat, bEndLon) = _endPoint(b, lats, lons);
-        final reversed = _near(aEndLat, aEndLon, bStartLat, bStartLon, endpointNearDeg) &&
-            _near(aStartLat, aStartLon, bEndLat, bEndLon, endpointNearDeg);
-        final iou = _bboxIoU(a.minLat, a.minLon, a.maxLat, a.maxLon, b.minLat, b.minLon, b.maxLat, b.maxLon);
-        if (reversed && iou >= 0.7) {
-          updated[curIdx] = b.copyWith(rerunOf: prevIdx);
-        }
-      }
-    }
-
     return FarmAssignment(farms: farms, runs: updated);
   }
-
-  static bool _near(double aLat, double aLon, double bLat, double bLon, double tolDeg) {
-    final dLat = aLat - bLat;
-    final dLon = aLon - bLon;
-    return (dLat * dLat + dLon * dLon) <= tolDeg * tolDeg;
-  }
-
-  static (double, double) _startPoint(RunSegment r, List<double> lats, List<double> lons) => (lats[r.startIndex], lons[r.startIndex]);
-  static (double, double) _endPoint(RunSegment r, List<double> lats, List<double> lons) => (lats[r.endIndex], lons[r.endIndex]);
 
   static double _bboxIoU(
     double aMinLat,
