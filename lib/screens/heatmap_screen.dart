@@ -69,6 +69,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   // Run selection state
   List<RunSegment> _runs = const [];
   int _selectedRunIndex = -1; // -1 means full range
+  List<FarmCluster> _farms = const [];
 
   @override
   void initState() {
@@ -102,16 +103,28 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         final points = _pointsFromProvider(provider);
         heatmapService.setPoints(points);
         setState(() {
-          _runs = RunSegmentationService.segmentRuns(
+          final segs = RunSegmentationService.segmentRuns(
             timestamps: provider.timestamps,
             lats: provider.latitudes,
             lons: provider.longitudes,
           );
-          // Default to latest run if available
+          final assignment = RunSegmentationService.assignFarmsAndReruns(
+            runs: segs,
+            lats: provider.latitudes,
+            lons: provider.longitudes,
+          );
+          _runs = assignment.runs;
+          _farms = assignment.farms;
+          // Default to latest run overall
           if (_runs.isNotEmpty) {
-            _selectedRunIndex = _runs.length - 1;
-            startTime = _runs[_selectedRunIndex].startTime;
-            endTime = _runs[_selectedRunIndex].endTime;
+            int latestIdx = 0;
+            DateTime latestEnd = _runs[0].endTime;
+            for (int i = 1; i < _runs.length; i++) {
+              if (_runs[i].endTime.isAfter(latestEnd)) { latestEnd = _runs[i].endTime; latestIdx = i; }
+            }
+            _selectedRunIndex = latestIdx;
+            startTime = _runs[latestIdx].startTime;
+            endTime = _runs[latestIdx].endTime;
           } else {
             startTime = provider.timestamps.reduce((a, b) => a.isBefore(b) ? a : b);
             endTime = provider.timestamps.reduce((a, b) => a.isAfter(b) ? a : b);
@@ -345,15 +358,27 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
         heatmapService.setPoints(points);
         if (!mounted) return;
         setState(() {
-          _runs = RunSegmentationService.segmentRuns(
+          final segs = RunSegmentationService.segmentRuns(
             timestamps: provider.timestamps,
             lats: provider.latitudes,
             lons: provider.longitudes,
           );
+          final assignment = RunSegmentationService.assignFarmsAndReruns(
+            runs: segs,
+            lats: provider.latitudes,
+            lons: provider.longitudes,
+          );
+          _runs = assignment.runs;
+          _farms = assignment.farms;
           if (_runs.isNotEmpty) {
-            _selectedRunIndex = _runs.length - 1; // default latest run
-            startTime = _runs[_selectedRunIndex].startTime;
-            endTime = _runs[_selectedRunIndex].endTime;
+            int latestIdx = 0;
+            DateTime latestEnd = _runs[0].endTime;
+            for (int i = 1; i < _runs.length; i++) {
+              if (_runs[i].endTime.isAfter(latestEnd)) { latestEnd = _runs[i].endTime; latestIdx = i; }
+            }
+            _selectedRunIndex = latestIdx;
+            startTime = _runs[latestIdx].startTime;
+            endTime = _runs[latestIdx].endTime;
           } else {
             startTime = provider.timestamps.reduce((a, b) => a.isBefore(b) ? a : b);
             endTime = provider.timestamps.reduce((a, b) => a.isAfter(b) ? a : b);
@@ -1072,71 +1097,137 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     final provider = context.read<CSVDataProvider>();
     if (!provider.hasData) return;
     if (_runs.isEmpty) {
-      setState(() { _runs = RunSegmentationService.segmentRuns(
-        timestamps: provider.timestamps,
-        lats: provider.latitudes,
-        lons: provider.longitudes,
-      ); });
+      setState(() {
+        final segs = RunSegmentationService.segmentRuns(
+          timestamps: provider.timestamps,
+          lats: provider.latitudes,
+          lons: provider.longitudes,
+        );
+        final assignment = RunSegmentationService.assignFarmsAndReruns(
+          runs: segs,
+          lats: provider.latitudes,
+          lons: provider.longitudes,
+        );
+        _runs = assignment.runs;
+        _farms = assignment.farms;
+      });
     }
     await showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Select Run'),
-          content: SizedBox(
-            width: 420,
-            child: _runs.isEmpty
-                ? const Text('No runs detected')
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: _runs.length,
-                    itemBuilder: (context, index) {
-                      final run = _runs[index];
-                      final subtitle = '${run.startTime.toString().split('.')[0]} — ${run.endTime.toString().split('.')[0]}\n'
-                          'lat ${run.minLat.toStringAsFixed(5)}..${run.maxLat.toStringAsFixed(5)}, '
-                          'lon ${run.minLon.toStringAsFixed(5)}..${run.maxLon.toStringAsFixed(5)}';
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              _selectedRunIndex = index;
-                              startTime = run.startTime;
-                              endTime = run.endTime;
-                            });
-                            _updateGridAndValues();
-                            Navigator.of(ctx).pop();
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
-                                  children: [
-                                    CircleAvatar(child: Text('${index + 1}')),
-                                    const SizedBox(width: 8),
-                                    Text('Run ${index + 1}', style: Theme.of(context).textTheme.titleMedium),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-                                const SizedBox(height: 8),
-                                _buildRunPreview(run),
-                              ],
+        int? selectedFarmId;
+        return StatefulBuilder(
+          builder: (context, setLocalState) {
+            Widget buildFarmList() {
+              if (_farms.isEmpty) return const Text('No farms detected');
+              return ListView.builder(
+                shrinkWrap: true,
+                itemCount: _farms.length,
+                itemBuilder: (context, i) {
+                  final farm = _farms[i];
+                  final subtitle = 'lat ${farm.minLat.toStringAsFixed(5)}..${farm.maxLat.toStringAsFixed(5)}, '
+                      'lon ${farm.minLon.toStringAsFixed(5)}..${farm.maxLon.toStringAsFixed(5)}\n'
+                      '${farm.runIndices.length} runs';
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: CircleAvatar(child: Text('${farm.id}')),
+                      title: Text('Farm ${farm.id}'),
+                      subtitle: Text(subtitle),
+                      onTap: () => setLocalState(() { selectedFarmId = farm.id; }),
+                    ),
+                  );
+                },
+              );
+            }
+
+            Widget buildRunList(int farmId) {
+              final farm = _farms.firstWhere((f) => f.id == farmId);
+              final runsForFarm = farm.runIndices
+                ..sort((a, b) => _runs[a].startTime.compareTo(_runs[b].startTime));
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Text(
+                      'Farm ${farm.id}: lat ${farm.minLat.toStringAsFixed(5)}..${farm.maxLat.toStringAsFixed(5)}, '
+                      'lon ${farm.minLon.toStringAsFixed(5)}..${farm.maxLon.toStringAsFixed(5)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: runsForFarm.length,
+                      itemBuilder: (context, idx) {
+                        final runIdx = runsForFarm[idx];
+                        final run = _runs[runIdx];
+                        final subtitle = '${run.startTime.toString().split('.')[0]} — ${run.endTime.toString().split('.')[0]}' +
+                          (run.rerunOf != null ? '  (rerun)' : '');
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                _selectedRunIndex = runIdx;
+                                startTime = run.startTime;
+                                endTime = run.endTime;
+                              });
+                              _updateGridAndValues();
+                              Navigator.of(ctx).pop();
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Row(
+                                    children: [
+                                      CircleAvatar(child: Text('${idx + 1}')),
+                                      const SizedBox(width: 8),
+                                      Text('Run ${idx + 1}', style: Theme.of(context).textTheme.titleMedium),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                                  const SizedBox(height: 8),
+                                  _buildRunPreview(run),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () { Navigator.of(ctx).pop(); },
-              child: const Text('Close'),
-            ),
-          ],
+                ],
+              );
+            }
+
+            return AlertDialog(
+              title: Row(
+                children: [
+                  if (selectedFarmId != null)
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => setLocalState(() { selectedFarmId = null; }),
+                    ),
+                  Text(selectedFarmId == null ? 'Select Farm' : 'Select Run'),
+                ],
+              ),
+              content: SizedBox(
+                width: 460,
+                height: 520,
+                child: selectedFarmId == null ? buildFarmList() : buildRunList(selectedFarmId!),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () { Navigator.of(ctx).pop(); },
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
