@@ -55,6 +55,30 @@ class _GraphScreenState extends State<GraphScreen> {
     final runTimestamps = segments.map((s) => s.startTime).toList();
     _dataLength = runTimestamps.length;
 
+    // Helper to average a raw series per segmented run
+    List<double> perRunAvgForSeries(List<double> series) {
+      final List<double> out = [];
+      for (final seg in segments) {
+        double sum = 0.0;
+        int count = 0;
+        final int s = seg.startIndex;
+        final int e = seg.endIndex;
+        for (int i = s; i <= e && i < series.length; i++) {
+          final v = series[i];
+          if (v.isFinite) { sum += v; count++; }
+        }
+        out.add(count == 0 ? double.nan : (sum / count));
+      }
+      return out;
+    }
+
+    // Precompute Plant Status per-run for all runs (used in both filtered and unfiltered paths)
+    final List<double> _encodedStatusSeries = List<double>.generate(
+      provider.timestamps.length,
+      (i) => i < provider.plantStatus.length ? encodePlantStatus(provider.plantStatus[i]).toDouble() : double.nan,
+    );
+    final List<double> _statusPerRunAll = perRunAvgForSeries(_encodedStatusSeries);
+
     // Farm clustering to enable filtering
     final assignment = RunSegmentationService.assignFarmsAndReruns(
       runs: segments,
@@ -129,7 +153,7 @@ class _GraphScreenState extends State<GraphScreen> {
       final temperaturePerRunFull = RunSegmentationService.averagesForMetric(summaries, 'Temperature');
       final humidityPerRunFull = RunSegmentationService.averagesForMetric(summaries, 'Humidity');
       final ecPerRunFull = RunSegmentationService.averagesForMetric(summaries, 'EC');
-      final statusPerRunFull = perRunAvg(encodedStatus);
+      final statusPerRunFull = _statusPerRunAll;
 
       final pHPerRun = filterSeries(pHPerRunFull);
       final nPerRun = filterSeries(nPerRunFull);
@@ -210,22 +234,6 @@ class _GraphScreenState extends State<GraphScreen> {
       );
     }
 
-    List<double> perRunAvg(List<double> series) {
-      final List<double> out = [];
-      for (final seg in segments) {
-        double sum = 0.0;
-        int count = 0;
-        final int s = seg.startIndex;
-        final int e = seg.endIndex;
-        for (int i = s; i <= e && i < series.length; i++) {
-          final v = series[i];
-          if (v.isFinite) { sum += v; count++; }
-        }
-        out.add(count == 0 ? double.nan : (sum / count));
-      }
-      return out;
-    }
-
     // Build per-run average series for each metric
     final pHPerRun = RunSegmentationService.averagesForMetric(summaries, 'pH');
     final nPerRun = RunSegmentationService.averagesForMetric(summaries, 'N');
@@ -236,11 +244,7 @@ class _GraphScreenState extends State<GraphScreen> {
     final ecPerRun = RunSegmentationService.averagesForMetric(summaries, 'EC');
 
     // Plant status encoded and averaged per run
-    final List<double> encodedStatus = List<double>.generate(
-      provider.timestamps.length,
-      (i) => i < provider.plantStatus.length ? encodePlantStatus(provider.plantStatus[i]).toDouble() : double.nan,
-    );
-    final statusPerRun = perRunAvg(encodedStatus);
+    final statusPerRun = _statusPerRunAll;
 
     return Scaffold(
       appBar: AppBar(
