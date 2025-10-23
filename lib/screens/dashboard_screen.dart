@@ -16,6 +16,7 @@ import 'graph_screen.dart';
 import 'heatmap_screen.dart';
 import 'robot_control_screen.dart'; // Import the new screen
 import '../providers/csv_data_provider.dart';
+import 'settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -283,6 +284,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const RobotControlScreen()),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
                 ),
               ),
             ],
