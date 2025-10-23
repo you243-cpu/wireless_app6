@@ -9,7 +9,8 @@ import '../widgets/plant_status_legend.dart';
 import '../services/run_segmentation.dart';
 
 class GraphScreen extends StatefulWidget {
-  const GraphScreen({super.key});
+  final bool embedded;
+  const GraphScreen({super.key, this.embedded = false});
 
   @override
   State<GraphScreen> createState() => _GraphScreenState();
@@ -40,9 +41,8 @@ class _GraphScreenState extends State<GraphScreen> {
     final iconColor = isDark ? Colors.tealAccent : Colors.black87;
 
     if (!provider.hasData) {
-      return const Scaffold(
-        body: Center(child: Text("No data available.")),
-      );
+      final Widget body = const Center(child: Text("No data available."));
+      return widget.embedded ? body : Scaffold(body: body);
     }
 
     // Compute run segmentation and per-run averages
@@ -195,13 +195,7 @@ class _GraphScreenState extends State<GraphScreen> {
       final statusPerRun = filterSeries(statusPerRunFull);
 
       _dataLength = filteredTimestamps.length;
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text("📊 Graphs"),
-          backgroundColor: isDark ? Colors.black : Colors.green[100],
-          foregroundColor: isDark ? Colors.white : Colors.black,
-        ),
-        body: Column(
+      final Widget body = Column(
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -282,6 +276,15 @@ class _GraphScreenState extends State<GraphScreen> {
           ],
         ),
       );
+      if (widget.embedded) return body;
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text("📊 Graphs"),
+          backgroundColor: isDark ? Colors.black : Colors.green[100],
+          foregroundColor: isDark ? Colors.white : Colors.black,
+        ),
+        body: body,
+      );
     }
 
     // Build per-run average series for each metric
@@ -296,13 +299,7 @@ class _GraphScreenState extends State<GraphScreen> {
     // Plant status encoded and averaged per run
     final statusPerRun = _statusPerRunAll;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("📊 Graphs"),
-        backgroundColor: isDark ? Colors.black : Colors.green[100],
-        foregroundColor: isDark ? Colors.white : Colors.black,
-      ),
-      body: Column(
+    final Widget body = Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -450,7 +447,15 @@ class _GraphScreenState extends State<GraphScreen> {
             ),
           ),
         ],
+      );
+    if (widget.embedded) return body;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("📊 Graphs"),
+        backgroundColor: isDark ? Colors.black : Colors.green[100],
+        foregroundColor: isDark ? Colors.white : Colors.black,
       ),
+      body: body,
     );
   }
 }

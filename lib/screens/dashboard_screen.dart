@@ -288,17 +288,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context, provider, _) {
         final pages = <Widget>[
           _buildHome(provider),
-          const GraphScreen(),
-          const HeatmapScreen(),
-          const RobotControlScreen(),
+          const GraphScreen(embedded: true),
+          const HeatmapScreen(embedded: true),
+          const RobotControlScreen(embedded: true),
         ];
 
         return Scaffold(
           appBar: AppBar(
             title: const Text("🌱 Soil Sensor Dashboard"),
             actions: [
-              IconButton(icon: const Icon(Icons.upload_file), onPressed: pickCsvFile),
-              IconButton(icon: _themeIcon(), onPressed: _toggleTheme),
               IconButton(
                 icon: const Icon(Icons.settings),
                 onPressed: () => Navigator.push(

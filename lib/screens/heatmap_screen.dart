@@ -23,7 +23,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
 class HeatmapScreen extends StatefulWidget {
-  const HeatmapScreen({super.key});
+  final bool embedded;
+  const HeatmapScreen({super.key, this.embedded = false});
 
   @override
   State<HeatmapScreen> createState() => _HeatmapScreenState();
@@ -785,37 +786,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Heatmap Viewer'),
-        backgroundColor: isDark ? Colors.grey[800] : Colors.blue,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.timeline),
-            tooltip: 'Select Run',
-            onPressed: _showRunsDialog,
-          ),
-          IconButton(
-            icon: Icon(is3DView ? Icons.view_agenda : Icons.view_in_ar),
-            onPressed: _toggleView,
-            tooltip: 'Toggle 2D/3D View',
-          ),
-          if (is3DView)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              tooltip: 'Reset 3D view',
-              onPressed: _reset3DView,
-            ),
-          IconButton(
-            icon: const Icon(Icons.folder_open),
-            tooltip: 'Set image save directory',
-            onPressed: () async {
-              await _promptSaveDirectory(context);
-            },
-          ),
-        ],
-      ),
-      body: isLoading
+    final Widget bodyContent = isLoading
               ? const Center(child: CircularProgressIndicator())
               : Padding(
               padding: const EdgeInsets.all(16.0),
@@ -1027,8 +998,42 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                       },
                     ),
                 ],
-              ),
             ),
+          );
+
+    if (widget.embedded) return bodyContent;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Heatmap Viewer'),
+        backgroundColor: isDark ? Colors.grey[800] : Colors.blue,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.timeline),
+            tooltip: 'Select Run',
+            onPressed: _showRunsDialog,
+          ),
+          IconButton(
+            icon: Icon(is3DView ? Icons.view_agenda : Icons.view_in_ar),
+            onPressed: _toggleView,
+            tooltip: 'Toggle 2D/3D View',
+          ),
+          if (is3DView)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Reset 3D view',
+              onPressed: _reset3DView,
+            ),
+          IconButton(
+            icon: const Icon(Icons.folder_open),
+            tooltip: 'Set image save directory',
+            onPressed: () async {
+              await _promptSaveDirectory(context);
+            },
+          ),
+        ],
+      ),
+      body: bodyContent,
     );
   }
 

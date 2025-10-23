@@ -177,7 +177,8 @@ class CommandButton {
 enum RecordingState { stopped, recording, paused }
 
 class RobotControlScreen extends StatefulWidget {
-  const RobotControlScreen({super.key});
+  final bool embedded;
+  const RobotControlScreen({super.key, this.embedded = false});
 
   @override
   State<RobotControlScreen> createState() => _RobotControlScreenState();
@@ -553,30 +554,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     const Color primaryColor = Colors.teal;
     final Color appBarColor = Colors.teal.shade800;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("🤖 Path & Control Center", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: appBarColor, // Dark Green/Teal
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.alarm),
-            tooltip: 'Schedule Automation',
-            onPressed: () => _openAutomationDialog(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.play_circle_fill),
-            tooltip: 'Manage Paths',
-            onPressed: () => _openPlaybackDialog(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Customize Buttons',
-            onPressed: () => _openCustomizationDialog(context),
-          ),
-        ],
-      ),
-      body: _isLoading
+    final Widget bodyContent = _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _isPlaybackActive
               ? _buildPlaybackStatus()
@@ -615,6 +593,34 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
                     ),
                   ),
                 ),
+    );
+
+    if (widget.embedded) return bodyContent;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("🤖 Path & Control Center", style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: appBarColor, // Dark Green/Teal
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.alarm),
+            tooltip: 'Schedule Automation',
+            onPressed: () => _openAutomationDialog(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.play_circle_fill),
+            tooltip: 'Manage Paths',
+            onPressed: () => _openPlaybackDialog(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Customize Buttons',
+            onPressed: () => _openCustomizationDialog(context),
+          ),
+        ],
+      ),
+      body: bodyContent,
     );
   }
 
