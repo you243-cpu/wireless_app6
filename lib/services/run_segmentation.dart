@@ -11,7 +11,6 @@ class RunSegment {
   final double minLon;
   final double maxLon;
   final int? farmId;
-  final int? rerunOf;
 
   const RunSegment({
     required this.startIndex,
@@ -23,7 +22,6 @@ class RunSegment {
     required this.minLon,
     required this.maxLon,
     this.farmId,
-    this.rerunOf,
   });
 
   RunSegment copyWith({
@@ -36,7 +34,6 @@ class RunSegment {
     double? minLon,
     double? maxLon,
     int? farmId,
-    int? rerunOf,
   }) {
     return RunSegment(
       startIndex: startIndex ?? this.startIndex,
@@ -48,7 +45,6 @@ class RunSegment {
       minLon: minLon ?? this.minLon,
       maxLon: maxLon ?? this.maxLon,
       farmId: farmId ?? this.farmId,
-      rerunOf: rerunOf ?? this.rerunOf,
     );
   }
 }
@@ -185,14 +181,13 @@ class RunSegmentationService {
   static bool _isFinite(double v) => v.isFinite && !v.isNaN;
   static double _hypot(double a, double b) => math.sqrt(a * a + b * b);
 
-  // Cluster runs into farms and mark reruns (reverse traversal within same area)
-  static FarmAssignment assignFarmsAndReruns({
+  // Cluster runs into farms by centroid proximity and bbox overlap
+  static FarmAssignment assignFarms({
     required List<RunSegment> runs,
     required List<double> lats,
     required List<double> lons,
     double centroidThresholdDeg = 0.0015, // ~160 m
     double iouThreshold = 0.5,
-    double endpointNearDeg = 0.0008, // ~90 m
   }) {
     if (runs.isEmpty) {
       return const FarmAssignment(farms: [], runs: []);

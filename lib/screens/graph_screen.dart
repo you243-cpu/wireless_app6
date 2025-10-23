@@ -80,7 +80,7 @@ class _GraphScreenState extends State<GraphScreen> {
     final List<double> _statusPerRunAll = perRunAvgForSeries(_encodedStatusSeries);
 
     // Farm clustering to enable filtering
-    final assignment = RunSegmentationService.assignFarmsAndReruns(
+    final assignment = RunSegmentationService.assignFarms(
       runs: segments,
       lats: provider.latitudes,
       lons: provider.longitudes,

@@ -108,7 +108,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
             lats: provider.latitudes,
             lons: provider.longitudes,
           );
-          final assignment = RunSegmentationService.assignFarmsAndReruns(
+          final assignment = RunSegmentationService.assignFarms(
             runs: segs,
             lats: provider.latitudes,
             lons: provider.longitudes,
@@ -363,7 +363,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
             lats: provider.latitudes,
             lons: provider.longitudes,
           );
-          final assignment = RunSegmentationService.assignFarmsAndReruns(
+          final assignment = RunSegmentationService.assignFarms(
             runs: segs,
             lats: provider.latitudes,
             lons: provider.longitudes,
@@ -1103,7 +1103,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
           lats: provider.latitudes,
           lons: provider.longitudes,
         );
-        final assignment = RunSegmentationService.assignFarmsAndReruns(
+        final assignment = RunSegmentationService.assignFarms(
           runs: segs,
           lats: provider.latitudes,
           lons: provider.longitudes,
@@ -1162,8 +1162,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                       itemBuilder: (context, idx) {
                         final runIdx = runsForFarm[idx];
                         final run = _runs[runIdx];
-                        final subtitle = '${run.startTime.toString().split('.')[0]} — ${run.endTime.toString().split('.')[0]}' +
-                          (run.rerunOf != null ? '  (rerun)' : '');
+                        final subtitle = '${run.startTime.toString().split('.')[0]} — ${run.endTime.toString().split('.')[0]}';
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: InkWell(
