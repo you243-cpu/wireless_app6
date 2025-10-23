@@ -20,7 +20,7 @@ class _GraphScreenState extends State<GraphScreen> {
   double zoomLevel = 3;
   int scrollIndex = 0;
   int _dataLength = 0; // number of x-points (runs)
-  Set<int> _selectedFarmIds = <int>{};
+  int? _selectedFarmId; // selected farm to display
 
   void zoomIn() => setState(() { if (zoomLevel < 5) zoomLevel += 1; });
   void zoomOut() => setState(() { if (zoomLevel > 1) zoomLevel -= 1; });
@@ -79,6 +79,48 @@ class _GraphScreenState extends State<GraphScreen> {
     );
     final List<double> _statusPerRunAll = perRunAvgForSeries(_encodedStatusSeries);
 
+    List<double> _buildCombinedIdealSeries(
+      List<double> pH,
+      List<double> n,
+      List<double> p,
+      List<double> k,
+      List<double> temperature,
+      List<double> humidity,
+      List<double> ec,
+    ) {
+      final int len = [pH, n, p, k, temperature, humidity, ec].map((s) => s.length).fold<int>(0, (a, b) => a == 0 ? b : (a < b ? a : b));
+      final List<double> out = List.filled(len, double.nan);
+      // Ideal ranges (1.0 is ideal)
+      double score(double value, double min, double max) {
+        if (!value.isFinite) return double.nan;
+        if (max <= min) return 1.0;
+        if (value >= min && value <= max) return 1.0;
+        final double mid = (min + max) / 2.0;
+        final double half = (max - min) / 2.0;
+        // Linear penalty outside optimal range, further away => lower score
+        final double dist = (value - mid).abs();
+        final double s = 1.0 - (dist / (half * 2.0));
+        return s.clamp(0.0, 1.0);
+      }
+      for (int i = 0; i < len; i++) {
+        final vals = <double>[
+          score(pH[i], 6.0, 7.5),
+          score(n[i], 100.0, 150.0),
+          score(p[i], 20.0, 50.0),
+          score(k[i], 150.0, 250.0),
+          score(temperature[i], 20.0, 25.0),
+          score(humidity[i], 40.0, 60.0),
+          score(ec[i], 1.0, 2.0),
+        ].where((v) => v.isFinite).toList();
+        if (vals.isEmpty) {
+          out[i] = double.nan;
+        } else {
+          out[i] = vals.reduce((a, b) => a + b) / vals.length;
+        }
+      }
+      return out;
+    }
+
     // Farm clustering to enable filtering
     final assignment = RunSegmentationService.assignFarms(
       runs: segments,
@@ -87,48 +129,34 @@ class _GraphScreenState extends State<GraphScreen> {
     );
     final farms = assignment.farms;
     final runsWithFarms = assignment.runs;
+    // Default to latest farm if none selected
+    _selectedFarmId ??= (() {
+      if (farms.isEmpty) return null;
+      int latestFarmId = farms.first.id;
+      DateTime latestEnd = DateTime.fromMillisecondsSinceEpoch(0);
+      for (final f in farms) {
+        for (final idx in f.runIndices) {
+          final end = runsWithFarms[idx].endTime;
+          if (end.isAfter(latestEnd)) { latestEnd = end; latestFarmId = f.id; }
+        }
+      }
+      return latestFarmId;
+    })();
 
-    // Build farm filter UI row
-    Widget farmFilters() {
+    // Build farm selector (single selection)
+    Widget farmSelector() {
       if (farms.isEmpty) return const SizedBox.shrink();
       return SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: FilterChip(
-                label: const Text('All Farms'),
-                selected: _selectedFarmIds.length == farms.length,
-                onSelected: (sel) {
-                  setState(() {
-                    if (_selectedFarmIds.length == farms.length) {
-                      _selectedFarmIds.clear();
-                    } else {
-                      _selectedFarmIds = farms.map((f) => f.id).toSet();
-                    }
-                  });
-                },
-              ),
-            ),
             ...farms.map((f) => Padding(
                   padding: const EdgeInsets.only(right: 8.0),
-                  child: GestureDetector(
-                    onLongPress: () => setState(() { _selectedFarmIds = {f.id}; }),
-                    child: FilterChip(
-                      label: Text('Farm ${f.id}')
-                    ,
-                      selected: _selectedFarmIds.contains(f.id),
-                      onSelected: (sel) {
-                        setState(() {
-                          if (_selectedFarmIds.contains(f.id)) {
-                            _selectedFarmIds.remove(f.id);
-                          } else {
-                            _selectedFarmIds.add(f.id);
-                          }
-                        });
-                      },
-                    ),
+                  child: FilterChip(
+                    label: Text('Farm ${f.id}')
+                  ,
+                    selected: _selectedFarmId == f.id,
+                    onSelected: (_) => setState(() { _selectedFarmId = f.id; }),
                   ),
                 )),
           ],
@@ -136,13 +164,15 @@ class _GraphScreenState extends State<GraphScreen> {
       );
     }
 
-    // Filter by selected farms if any
-    List<int> allowedFarmIds = _selectedFarmIds.isEmpty ? farms.map((f) => f.id).toList() : _selectedFarmIds.toList();
-    List<int> allowedRunIndices = [
-      for (int i = 0; i < runsWithFarms.length; i++)
-        if ((runsWithFarms[i].farmId != null) && allowedFarmIds.contains(runsWithFarms[i].farmId)) i
-    ];
-    if (allowedRunIndices.isNotEmpty && allowedRunIndices.length != runsWithFarms.length) {
+    // Filter to selected farm only
+    final int? farmId = _selectedFarmId;
+    List<int> allowedRunIndices = farmId == null
+        ? <int>[]
+        : [
+            for (int i = 0; i < runsWithFarms.length; i++)
+              if (runsWithFarms[i].farmId == farmId) i
+          ];
+    if (allowedRunIndices.isNotEmpty) {
       // Create filtered per-run arrays preserving order
       List<DateTime> filteredTimestamps = [ for (final i in allowedRunIndices) runTimestamps[i] ];
       List<double> filterSeries(List<double> s) => [ for (final i in allowedRunIndices) (i < s.length ? s[i] : double.nan) ];
@@ -182,7 +212,7 @@ class _GraphScreenState extends State<GraphScreen> {
                 IconButton(onPressed: scrollRight, icon: Icon(Icons.arrow_right, color: iconColor)),
               ],
             ),
-            farmFilters(),
+            farmSelector(),
             Expanded(
               child: DefaultTabController(
                 length: 9,
@@ -221,7 +251,27 @@ class _GraphScreenState extends State<GraphScreen> {
                             const PlantStatusLegend(axis: Axis.horizontal, isDense: true, numericOnly: false),
                             Expanded(child: LineChartWidget(data: statusPerRun, color: Colors.teal, label: "Plant Status (count or No Turmeric)", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex)),
                           ]),
-                          MultiLineChartWidget(pHData: pHPerRun, nData: nPerRun, pData: pPerRun, kData: kPerRun, temperatureData: temperaturePerRun, humidityData: humidityPerRun, ecData: ecPerRun, timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
+                        MultiLineChartWidget(
+                          pHData: pHPerRun,
+                          nData: nPerRun,
+                          pData: pPerRun,
+                          kData: kPerRun,
+                          temperatureData: temperaturePerRun,
+                          humidityData: humidityPerRun,
+                          ecData: ecPerRun,
+                          timestamps: filteredTimestamps,
+                          zoomLevel: zoomLevel,
+                          scrollIndex: scrollIndex,
+                          combinedSeries: _buildCombinedIdealSeries(
+                            pHPerRun,
+                            nPerRun,
+                            pPerRun,
+                            kPerRun,
+                            temperaturePerRun,
+                            humidityPerRun,
+                            ecPerRun,
+                          ),
+                        ),
                         ],
                       ),
                     ),
@@ -382,6 +432,15 @@ class _GraphScreenState extends State<GraphScreen> {
                           timestamps: runTimestamps,
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
+                          combinedSeries: _buildCombinedIdealSeries(
+                            pHPerRun,
+                            nPerRun,
+                            pPerRun,
+                            kPerRun,
+                            temperaturePerRun,
+                            humidityPerRun,
+                            ecPerRun,
+                          ),
                         ),
                       ],
                     ),
