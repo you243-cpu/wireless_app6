@@ -1,9 +1,14 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AppSettings extends ChangeNotifier {
   String _saveDirectory = '';
   Set<String> _selectedMetrics = {};
   String _dataDirectory = '';
+
+  // Appearance settings
+  ThemeMode _themeMode = ThemeMode.dark; // default: dark as requested
+  int _seedColorValue = const Color(0xFF2ECC71).value; // default: modern green
 
   // Advanced segmentation/grouping settings
   int _timeGapMinutes = 60; // split runs when gap > minutes
@@ -16,11 +21,18 @@ class AppSettings extends ChangeNotifier {
   Set<String> get selectedMetrics => _selectedMetrics;
   String get dataDirectory => _dataDirectory;
 
+  ThemeMode get themeMode => _themeMode;
+  Color get seedColor => Color(_seedColorValue);
+
   int get timeGapMinutes => _timeGapMinutes;
   bool get enableFarmGrouping => _enableFarmGrouping;
   double get farmCentroidThresholdMeters => _farmCentroidThresholdMeters;
   double get bboxIoUThreshold => _bboxIoUThreshold;
   // endpoint proximity removed
+
+  // ----- Persistence -----
+  static const _prefsThemeModeKey = 'appearance.themeMode';
+  static const _prefsSeedColorKey = 'appearance.seedColor';
 
   void setSaveDirectory(String dir) {
     _saveDirectory = dir;
@@ -35,6 +47,24 @@ class AppSettings extends ChangeNotifier {
   void setDataDirectory(String dir) {
     _dataDirectory = dir;
     notifyListeners();
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    _themeMode = mode;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsThemeModeKey, mode.name);
+    } catch (_) {}
+  }
+
+  Future<void> setSeedColor(Color color) async {
+    _seedColorValue = color.value;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_prefsSeedColorKey, _seedColorValue);
+    } catch (_) {}
   }
 
   void setTimeGapMinutes(int minutes) {
@@ -59,4 +89,31 @@ class AppSettings extends ChangeNotifier {
   }
 
   // removed setter
+
+  // Load persisted appearance settings
+  Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final themeName = prefs.getString(_prefsThemeModeKey);
+      if (themeName != null) {
+        switch (themeName) {
+          case 'light':
+            _themeMode = ThemeMode.light;
+            break;
+          case 'dark':
+            _themeMode = ThemeMode.dark;
+            break;
+          default:
+            _themeMode = ThemeMode.system;
+        }
+      }
+      final colorVal = prefs.getInt(_prefsSeedColorKey);
+      if (colorVal != null) {
+        _seedColorValue = colorVal;
+      }
+    } catch (_) {
+      // ignore
+    }
+    notifyListeners();
+  }
 }
