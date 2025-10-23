@@ -241,7 +241,7 @@ class MultiLineChartWidget extends StatelessWidget {
       isCurved: true,
       color: color,
       barWidth: 2,
-      dotData: const FlDotData(show: false),
+      dotData: const FlDotData(show: true),
     );
   }
 }

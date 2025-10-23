@@ -192,7 +192,7 @@ class LineChartWidget extends StatelessWidget {
                                 isCurved: true,
                                 color: color,
                                 barWidth: 2,
-                                dotData: FlDotData(show: spots.length <= 1),
+                                dotData: const FlDotData(show: true),
                                 belowBarData: BarAreaData(
                                   show: true,
                                   gradient: LinearGradient(
