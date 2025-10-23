@@ -15,6 +15,8 @@ class MultiLineChartWidget extends StatelessWidget {
 
   final double zoomLevel;
   final int scrollIndex;
+  // If provided, render only this combined series instead of multiple lines
+  final List<double>? combinedSeries;
 
   const MultiLineChartWidget({
     super.key,
@@ -28,6 +30,7 @@ class MultiLineChartWidget extends StatelessWidget {
     required this.timestamps,
     this.zoomLevel = 1.0,
     this.scrollIndex = 0,
+    this.combinedSeries,
   });
 
   @override
@@ -44,26 +47,34 @@ class MultiLineChartWidget extends StatelessWidget {
 
     final shownTimestamps = timestamps.sublist(start, end);
 
-    List<LineChartBarData> lines = [
-      _buildLine(pHData.sublist(start, end), Colors.green),
-      _buildLine(nData.sublist(start, end), Colors.blue),
-      _buildLine(pData.sublist(start, end), Colors.orange),
-      _buildLine(kData.sublist(start, end), Colors.purple),
-      _buildLine(temperatureData.sublist(start, end), Colors.red),
-      _buildLine(humidityData.sublist(start, end), Colors.cyan),
-      _buildLine(ecData.sublist(start, end), Colors.indigo),
-    ];
+    List<LineChartBarData> lines;
+    if (combinedSeries != null) {
+      final slice = combinedSeries!.sublist(start, end);
+      lines = [_buildLine(slice, Colors.teal)];
+    } else {
+      lines = [
+        _buildLine(pHData.sublist(start, end), Colors.green),
+        _buildLine(nData.sublist(start, end), Colors.blue),
+        _buildLine(pData.sublist(start, end), Colors.orange),
+        _buildLine(kData.sublist(start, end), Colors.purple),
+        _buildLine(temperatureData.sublist(start, end), Colors.red),
+        _buildLine(humidityData.sublist(start, end), Colors.cyan),
+        _buildLine(ecData.sublist(start, end), Colors.indigo),
+      ];
+    }
 
     // Derive global min/max across visible series for better scaling
-    final List<List<double>> visibleSeries = [
-      pHData.sublist(start, end),
-      nData.sublist(start, end),
-      pData.sublist(start, end),
-      kData.sublist(start, end),
-      temperatureData.sublist(start, end),
-      humidityData.sublist(start, end),
-      ecData.sublist(start, end),
-    ];
+    final List<List<double>> visibleSeries = combinedSeries != null
+        ? [combinedSeries!.sublist(start, end)]
+        : [
+            pHData.sublist(start, end),
+            nData.sublist(start, end),
+            pData.sublist(start, end),
+            kData.sublist(start, end),
+            temperatureData.sublist(start, end),
+            humidityData.sublist(start, end),
+            ecData.sublist(start, end),
+          ];
 
     double minY = double.infinity;
     double maxY = -double.infinity;
@@ -218,11 +229,11 @@ class MultiLineChartWidget extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // Legend
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: _LegendRow(axisColor: axisColor),
-                  ),
+                  if (combinedSeries == null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: _LegendRow(axisColor: axisColor),
+                    ),
                 ],
               ),
             ),
