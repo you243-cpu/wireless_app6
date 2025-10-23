@@ -115,11 +115,6 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
           value: settings.enableFarmGrouping,
           onChanged: (v) => context.read<AppSettings>().setEnableFarmGrouping(v),
         ),
-        SwitchListTile(
-          title: const Text('Enable rerun detection'),
-          value: settings.enableRerunDetection,
-          onChanged: (v) => context.read<AppSettings>().setEnableRerunDetection(v),
-        ),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -156,26 +151,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            const Expanded(child: Text('Endpoint proximity (meters)')),
-            SizedBox(
-              width: 120,
-              child: TextFormField(
-                initialValue: settings.endpointNearMeters.toStringAsFixed(0),
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-                onFieldSubmitted: (v) {
-                  final parsed = double.tryParse(v) ?? settings.endpointNearMeters;
-                  context.read<AppSettings>().setEndpointNearMeters(parsed);
-                },
-              ),
-            ),
-          ],
-        ),
         const SizedBox(height: 24),
-        const Text('These thresholds influence farm clustering and rerun detection.'),
+        const Text('These thresholds influence farm clustering.'),
       ],
     );
   }
