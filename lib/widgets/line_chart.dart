@@ -33,11 +33,15 @@ class LineChartWidget extends StatelessWidget {
     final gridColor = isDark ? Colors.white24 : Colors.black26;
 
     // Determine visible window
-    int visibleCount = (timestamps.length ~/ zoomLevel).clamp(6, timestamps.length);
+    int visibleCount = (timestamps.length ~/ zoomLevel).clamp(1, timestamps.length);
     int start = scrollIndex.clamp(0, (timestamps.length - visibleCount).clamp(0, timestamps.length));
     int end = (start + visibleCount).clamp(0, timestamps.length);
 
     final shownData = data.sublist(start, end);
+    final List<FlSpot> spots = [
+      for (int i = 0; i < shownData.length; i++)
+        if (shownData[i].isFinite) FlSpot(i.toDouble(), shownData[i]),
+    ];
     final shownTimestamps = timestamps.sublist(start, end);
 
     // Compute a comfortable Y-range with padding for readability
@@ -134,19 +138,17 @@ class LineChartWidget extends StatelessWidget {
                                 sideTitles: SideTitles(
                                   showTitles: true,
                                   reservedSize: 24,
-                                  interval: (shownTimestamps.length / 6)
-                                      .floorToDouble()
-                                      .clamp(1, shownTimestamps.length.toDouble()),
+                                  interval: shownTimestamps.isEmpty ? 1 : (shownTimestamps.length <= 6 ? 1 : (shownTimestamps.length / 6).floorToDouble()),
                                   getTitlesWidget: (value, meta) {
                                     int index = value.toInt();
                                     if (index < 0 || index >= shownTimestamps.length) {
                                       return const SizedBox.shrink();
                                     }
-                                  final dt = shownTimestamps[index];
-                                  return Text(
-                                    timeFmt.format(dt),
-                                    style: TextStyle(fontSize: 10, color: axisColor),
-                                  );
+                                    final dt = shownTimestamps[index];
+                                    return Text(
+                                      timeFmt.format(dt),
+                                      style: TextStyle(fontSize: 10, color: axisColor),
+                                    );
                                   },
                                 ),
                               ),
@@ -186,14 +188,11 @@ class LineChartWidget extends StatelessWidget {
                             ),
                             lineBarsData: [
                               LineChartBarData(
-                                spots: [
-                                  for (int i = 0; i < shownData.length; i++)
-                                    if (shownData[i].isFinite) FlSpot(i.toDouble(), shownData[i]),
-                                ],
+                                spots: spots,
                                 isCurved: true,
                                 color: color,
                                 barWidth: 2,
-                                dotData: const FlDotData(show: false),
+                                dotData: FlDotData(show: spots.length <= 1),
                                 belowBarData: BarAreaData(
                                   show: true,
                                   gradient: LinearGradient(
