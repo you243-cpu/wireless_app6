@@ -10,6 +10,8 @@ class RunSegment {
   final double maxLat;
   final double minLon;
   final double maxLon;
+  final int? farmId;
+  final int? rerunOf;
 
   const RunSegment({
     required this.startIndex,
@@ -20,7 +22,35 @@ class RunSegment {
     required this.maxLat,
     required this.minLon,
     required this.maxLon,
+    this.farmId,
+    this.rerunOf,
   });
+
+  RunSegment copyWith({
+    int? startIndex,
+    int? endIndex,
+    DateTime? startTime,
+    DateTime? endTime,
+    double? minLat,
+    double? maxLat,
+    double? minLon,
+    double? maxLon,
+    int? farmId,
+    int? rerunOf,
+  }) {
+    return RunSegment(
+      startIndex: startIndex ?? this.startIndex,
+      endIndex: endIndex ?? this.endIndex,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      minLat: minLat ?? this.minLat,
+      maxLat: maxLat ?? this.maxLat,
+      minLon: minLon ?? this.minLon,
+      maxLon: maxLon ?? this.maxLon,
+      farmId: farmId ?? this.farmId,
+      rerunOf: rerunOf ?? this.rerunOf,
+    );
+  }
 }
 
 class RunSummary {
@@ -154,4 +184,182 @@ class RunSegmentationService {
 
   static bool _isFinite(double v) => v.isFinite && !v.isNaN;
   static double _hypot(double a, double b) => math.sqrt(a * a + b * b);
+
+  // Cluster runs into farms and mark reruns (reverse traversal within same area)
+  static FarmAssignment assignFarmsAndReruns({
+    required List<RunSegment> runs,
+    required List<double> lats,
+    required List<double> lons,
+    double centroidThresholdDeg = 0.0015, // ~160 m
+    double iouThreshold = 0.5,
+    double endpointNearDeg = 0.0008, // ~90 m
+  }) {
+    if (runs.isEmpty) {
+      return const FarmAssignment(farms: [], runs: []);
+    }
+
+    final List<FarmCluster> farms = [];
+    final List<RunSegment> updated = List<RunSegment>.from(runs);
+
+    (double, double) centroidOf(RunSegment r) => ((r.minLat + r.maxLat) / 2.0, (r.minLon + r.maxLon) / 2.0);
+
+    int nextFarmId = 1;
+    for (int i = 0; i < updated.length; i++) {
+      final r = updated[i];
+      final (cLat, cLon) = centroidOf(r);
+      int? assignedId;
+      double bestScore = double.negativeInfinity;
+      for (final f in farms) {
+        final dLat = cLat - f.centroidLat;
+        final dLon = cLon - f.centroidLon;
+        final dist2 = dLat * dLat + dLon * dLon;
+        final nearCentroid = dist2 <= centroidThresholdDeg * centroidThresholdDeg;
+        final iou = _bboxIoU(r.minLat, r.minLon, r.maxLat, r.maxLon, f.minLat, f.minLon, f.maxLat, f.maxLon);
+        final score = (nearCentroid ? 1.0 : 0.0) + iou; // prefer centroid proximity + overlap
+        if (score > bestScore && (nearCentroid || iou >= iouThreshold)) {
+          bestScore = score;
+          assignedId = f.id;
+        }
+      }
+      if (assignedId == null) {
+        final newFarm = FarmCluster(
+          id: nextFarmId++,
+          centroidLat: cLat,
+          centroidLon: cLon,
+          minLat: r.minLat,
+          maxLat: r.maxLat,
+          minLon: r.minLon,
+          maxLon: r.maxLon,
+          runIndices: [i],
+        );
+        farms.add(newFarm);
+        updated[i] = r.copyWith(farmId: newFarm.id);
+      } else {
+        final idx = farms.indexWhere((f) => f.id == assignedId);
+        final f = farms[idx];
+        final newMinLat = math.min(f.minLat, r.minLat);
+        final newMaxLat = math.max(f.maxLat, r.maxLat);
+        final newMinLon = math.min(f.minLon, r.minLon);
+        final newMaxLon = math.max(f.maxLon, r.maxLon);
+        final newCentroidLat = (newMinLat + newMaxLat) / 2.0;
+        final newCentroidLon = (newMinLon + newMaxLon) / 2.0;
+        farms[idx] = f.copyWith(
+          centroidLat: newCentroidLat,
+          centroidLon: newCentroidLon,
+          minLat: newMinLat,
+          maxLat: newMaxLat,
+          minLon: newMinLon,
+          maxLon: newMaxLon,
+          runIndices: [...f.runIndices, i],
+        );
+        updated[i] = r.copyWith(farmId: assignedId);
+      }
+    }
+
+    // Mark reruns within each farm (reverse endpoints and high bbox overlap)
+    for (final f in farms) {
+      final indices = [...f.runIndices]..sort((a, b) => updated[a].startTime.compareTo(updated[b].startTime));
+      for (int k = 1; k < indices.length; k++) {
+        final prevIdx = indices[k - 1];
+        final curIdx = indices[k];
+        final a = updated[prevIdx];
+        final b = updated[curIdx];
+        final (aStartLat, aStartLon) = _startPoint(a, lats, lons);
+        final (aEndLat, aEndLon) = _endPoint(a, lats, lons);
+        final (bStartLat, bStartLon) = _startPoint(b, lats, lons);
+        final (bEndLat, bEndLon) = _endPoint(b, lats, lons);
+        final reversed = _near(aEndLat, aEndLon, bStartLat, bStartLon, endpointNearDeg) &&
+            _near(aStartLat, aStartLon, bEndLat, bEndLon, endpointNearDeg);
+        final iou = _bboxIoU(a.minLat, a.minLon, a.maxLat, a.maxLon, b.minLat, b.minLon, b.maxLat, b.maxLon);
+        if (reversed && iou >= 0.7) {
+          updated[curIdx] = b.copyWith(rerunOf: prevIdx);
+        }
+      }
+    }
+
+    return FarmAssignment(farms: farms, runs: updated);
+  }
+
+  static bool _near(double aLat, double aLon, double bLat, double bLon, double tolDeg) {
+    final dLat = aLat - bLat;
+    final dLon = aLon - bLon;
+    return (dLat * dLat + dLon * dLon) <= tolDeg * tolDeg;
+  }
+
+  static (double, double) _startPoint(RunSegment r, List<double> lats, List<double> lons) => (lats[r.startIndex], lons[r.startIndex]);
+  static (double, double) _endPoint(RunSegment r, List<double> lats, List<double> lons) => (lats[r.endIndex], lons[r.endIndex]);
+
+  static double _bboxIoU(
+    double aMinLat,
+    double aMinLon,
+    double aMaxLat,
+    double aMaxLon,
+    double bMinLat,
+    double bMinLon,
+    double bMaxLat,
+    double bMaxLon,
+  ) {
+    final interMinLat = math.max(aMinLat, bMinLat);
+    final interMinLon = math.max(aMinLon, bMinLon);
+    final interMaxLat = math.min(aMaxLat, bMaxLat);
+    final interMaxLon = math.min(aMaxLon, bMaxLon);
+    final interW = math.max(0.0, interMaxLon - interMinLon);
+    final interH = math.max(0.0, interMaxLat - interMinLat);
+    final interArea = interW * interH;
+    final aArea = (aMaxLon - aMinLon) * (aMaxLat - aMinLat);
+    final bArea = (bMaxLon - bMinLon) * (bMaxLat - bMinLat);
+    final union = aArea + bArea - interArea;
+    if (union <= 0) return 0.0;
+    return interArea / union;
+  }
+}
+
+class FarmCluster {
+  final int id;
+  final double centroidLat;
+  final double centroidLon;
+  final double minLat;
+  final double maxLat;
+  final double minLon;
+  final double maxLon;
+  final List<int> runIndices; // indices into runs list
+
+  const FarmCluster({
+    required this.id,
+    required this.centroidLat,
+    required this.centroidLon,
+    required this.minLat,
+    required this.maxLat,
+    required this.minLon,
+    required this.maxLon,
+    required this.runIndices,
+  });
+
+  FarmCluster copyWith({
+    int? id,
+    double? centroidLat,
+    double? centroidLon,
+    double? minLat,
+    double? maxLat,
+    double? minLon,
+    double? maxLon,
+    List<int>? runIndices,
+  }) {
+    return FarmCluster(
+      id: id ?? this.id,
+      centroidLat: centroidLat ?? this.centroidLat,
+      centroidLon: centroidLon ?? this.centroidLon,
+      minLat: minLat ?? this.minLat,
+      maxLat: maxLat ?? this.maxLat,
+      minLon: minLon ?? this.minLon,
+      maxLon: maxLon ?? this.maxLon,
+      runIndices: runIndices ?? this.runIndices,
+    );
+  }
+}
+
+class FarmAssignment {
+  final List<FarmCluster> farms;
+  final List<RunSegment> runs; // updated with farmId/rerunOf
+  const FarmAssignment({required this.farms, required this.runs});
 }
