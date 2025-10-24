@@ -32,7 +32,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/timeaftertimesynthetic_soil_and_plant_data_multiple_runs_s_pattern.csv
+    - assets/synthetic_soil_and_plant_data_s2_pattern.csv
     - assets/
   # The 'generate: true' line is for older versions of the
   # flutter_gen or flutter_localizations package and can often be omitted.
