@@ -27,7 +27,8 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with SingleTickerProviderStateMixin {
   final String espIP = "192.168.4.1"; // ESP8266 IP
 
   // Current sensor values
@@ -258,6 +259,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   int _currentIndex = 0; // 0: Home, 1: Graph, 2: Heatmap, 3: Robot
   int? _selectedHomeRunIndex; // for averaging health per selected run
+  late final PageController _pageController;
+  late final TabController _tabController;
 
   void _showTabSnackBar(int targetIndex) {
     final labels = ['Home', 'Graphs', 'Heatmap', 'Robot'];
@@ -284,6 +287,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _currentIndex, keepPage: true);
+    _tabController = TabController(length: 4, vsync: this, initialIndex: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<CSVDataProvider>(
       builder: (context, provider, _) {
@@ -299,6 +316,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             title: const Text("🌱 Soil Sensor Dashboard"),
             actions: [
               IconButton(
+                icon: const Icon(Icons.upload_file),
+                tooltip: 'Choose CSV file',
+                onPressed: pickCsvFile,
+              ),
+              IconButton(
                 icon: const Icon(Icons.settings),
                 onPressed: () => Navigator.push(
                   context,
@@ -306,50 +328,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(48),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
+                  onTap: (i) {
+                    _pageController.jumpToPage(i);
+                    setState(() => _currentIndex = i);
+                  },
+                  tabs: const [
+                    Tab(icon: Icon(Icons.home), text: 'Home'),
+                    Tab(icon: Icon(Icons.show_chart), text: 'Graphs'),
+                    Tab(icon: Icon(Icons.grid_on), text: 'Heatmap'),
+                    Tab(icon: Icon(Icons.smart_toy), text: 'Robot'),
+                  ],
+                ),
+              ),
+            ),
           ),
           body: GestureDetector(
             onHorizontalDragEnd: (details) {
               final velocity = details.primaryVelocity ?? 0;
               if (velocity < -200) {
-                // swipe left
-                if (_currentIndex < pages.length - 1) setState(() => _currentIndex++);
+                if (_currentIndex < pages.length - 1) {
+                  setState(() => _currentIndex++);
+                  _tabController.index = _currentIndex;
+                  _pageController.animateToPage(
+                    _currentIndex,
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOut,
+                  );
+                }
               } else if (velocity > 200) {
-                // swipe right
-                if (_currentIndex > 0) setState(() => _currentIndex--);
+                if (_currentIndex > 0) {
+                  setState(() => _currentIndex--);
+                  _tabController.index = _currentIndex;
+                  _pageController.animateToPage(
+                    _currentIndex,
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOut,
+                  );
+                }
               }
             },
             child: PageView(
-              controller: PageController(initialPage: _currentIndex, keepPage: false),
-              onPageChanged: (i) => setState(() { _currentIndex = i; }),
+              controller: _pageController,
+              onPageChanged: (i) {
+                setState(() => _currentIndex = i);
+                _tabController.index = i;
+              },
               children: pages,
-            ),
-          ),
-          bottomNavigationBar: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 10,
-              children: [
-                _snackButton('Home', Icons.home, () => _showTabSnackBar(0)),
-                _snackButton('Graphs', Icons.show_chart, () => _showTabSnackBar(1)),
-                _snackButton('Heatmap', Icons.grid_on, () => _showTabSnackBar(2)),
-                _snackButton('Robot', Icons.smart_toy, () => _showTabSnackBar(3)),
-              ],
             ),
           ),
         );
       },
-    );
-  }
-
-  Widget _snackButton(String label, IconData icon, VoidCallback onTap) {
-    final cs = Theme.of(context).colorScheme;
-    return ActionChip(
-      avatar: Icon(icon, color: cs.primary),
-      label: Text(label),
-      onPressed: onTap,
-      backgroundColor: cs.surface,
-      side: BorderSide(color: cs.primary.withOpacity(0.2)),
     );
   }
 
