@@ -275,6 +275,7 @@ class _GraphScreenState extends State<GraphScreen> {
             ),
           ],
         ),
+      );
       if (widget.embedded) return body;
       return Scaffold(
         appBar: AppBar(
