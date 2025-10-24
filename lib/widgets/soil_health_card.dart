@@ -7,18 +7,19 @@ class SoilHealthCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Card(
-      color: Colors.green.shade50,
+      color: colorScheme.secondaryContainer,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            const Icon(Icons.eco, color: Colors.green, size: 40),
+            Icon(Icons.eco, color: colorScheme.secondary, size: 40),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
                 message,
-                style: const TextStyle(fontSize: 16),
+                style: TextStyle(fontSize: 16, color: colorScheme.onSecondaryContainer),
               ),
             ),
           ],
