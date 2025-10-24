@@ -1006,7 +1006,6 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Heatmap Viewer'),
-        backgroundColor: isDark ? Colors.grey[800] : Colors.blue,
         actions: [
           IconButton(
             icon: const Icon(Icons.timeline),

@@ -36,9 +36,7 @@ class _GraphScreenState extends State<GraphScreen> {
     final provider = context.watch<CSVDataProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final tabLabelColor = isDark ? Colors.tealAccent : Colors.green;
-    final unselectedTabColor = isDark ? Colors.grey[400]! : Colors.grey[600]!;
-    final iconColor = isDark ? Colors.tealAccent : Colors.black87;
+    final iconColor = Theme.of(context).iconTheme.color ?? (isDark ? Colors.white70 : Colors.black87);
 
     if (!provider.hasData) {
       final Widget body = const Center(child: Text("No data available."));
@@ -214,9 +212,6 @@ class _GraphScreenState extends State<GraphScreen> {
                   children: [
                     TabBar(
                       isScrollable: true,
-                      labelColor: tabLabelColor,
-                      unselectedLabelColor: unselectedTabColor,
-                      indicatorColor: tabLabelColor,
                       tabs: const [
                         Tab(text: "pH"),
                         Tab(text: "N"),
@@ -280,8 +275,6 @@ class _GraphScreenState extends State<GraphScreen> {
       return Scaffold(
         appBar: AppBar(
           title: const Text("📊 Graphs"),
-          backgroundColor: isDark ? Colors.black : Colors.green[100],
-          foregroundColor: isDark ? Colors.white : Colors.black,
         ),
         body: body,
       );
@@ -326,9 +319,6 @@ class _GraphScreenState extends State<GraphScreen> {
                 children: [
                   TabBar(
                     isScrollable: true,
-                    labelColor: tabLabelColor,
-                    unselectedLabelColor: unselectedTabColor,
-                    indicatorColor: tabLabelColor,
                     tabs: const [
                       Tab(text: "pH"),
                       Tab(text: "N"),
@@ -452,8 +442,6 @@ class _GraphScreenState extends State<GraphScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("📊 Graphs"),
-        backgroundColor: isDark ? Colors.black : Colors.green[100],
-        foregroundColor: isDark ? Colors.white : Colors.black,
       ),
       body: body,
     );

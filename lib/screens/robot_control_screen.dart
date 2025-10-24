@@ -550,9 +550,8 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Theme Colors
-    const Color primaryColor = Colors.teal;
-    final Color appBarColor = Colors.teal.shade800;
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final Color primaryColor = scheme.primary;
 
     final Widget bodyContent = _isLoading
         ? const Center(child: CircularProgressIndicator())
@@ -599,8 +598,6 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("🤖 Path & Control Center", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: appBarColor, // Dark Green/Teal
-        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.alarm),
