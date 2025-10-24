@@ -43,12 +43,16 @@ class _DashboardScreenState extends State<DashboardScreen>
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _currentIndex, keepPage: true);
+    _tabController = TabController(length: 4, vsync: this, initialIndex: _currentIndex);
     _timer = Timer.periodic(const Duration(seconds: 2), (_) => fetchSensorData());
     _loadAssetCSV();
   }
 
   @override
   void dispose() {
+    _pageController.dispose();
+    _tabController.dispose();
     _timer?.cancel();
     super.dispose();
   }
@@ -284,20 +288,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         ),
       ),
     );
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController(initialPage: _currentIndex, keepPage: true);
-    _tabController = TabController(length: 4, vsync: this, initialIndex: _currentIndex);
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    _tabController.dispose();
-    super.dispose();
   }
 
   @override
