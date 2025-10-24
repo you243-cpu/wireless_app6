@@ -33,6 +33,8 @@ class HeatmapScreen extends StatefulWidget {
 class _HeatmapScreenState extends State<HeatmapScreen> {
   final heatmapService = HeatmapService();
   final HeatmapSurface3DController _surface3DController = HeatmapSurface3DController();
+  // Sentinel for "farm average" selection when a farm is chosen
+  static const int _farmAverageSentinel = -2;
   final List<String> metrics = [
     'Plant Status',
     'pH',
@@ -71,6 +73,7 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
   List<RunSegment> _runs = const [];
   int _selectedRunIndex = -1; // -1 means full range
   List<FarmCluster> _farms = const [];
+  int? _selectedFarmId; // selected farm (null = all farms)
 
   @override
   void initState() {
@@ -116,8 +119,26 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
           );
           _runs = assignment.runs;
           _farms = assignment.farms;
-          // Default to latest run overall
-          if (_runs.isNotEmpty) {
+          // Default to latest farm average if farms exist; otherwise latest run
+          if (_farms.isNotEmpty) {
+            int latestFarmId = _farms.first.id;
+            DateTime latestEnd = DateTime.fromMillisecondsSinceEpoch(0);
+            for (final f in _farms) {
+              for (final idx in f.runIndices) {
+                final end = _runs[idx].endTime;
+                if (end.isAfter(latestEnd)) { latestEnd = end; latestFarmId = f.id; }
+              }
+            }
+            _selectedFarmId = latestFarmId;
+            final farmIndices = _runsForFarm(latestFarmId);
+            if (farmIndices.isNotEmpty) {
+              final farmStart = farmIndices.map((i) => _runs[i].startTime).reduce((a, b) => a.isBefore(b) ? a : b);
+              final farmEnd = farmIndices.map((i) => _runs[i].endTime).reduce((a, b) => a.isAfter(b) ? a : b);
+              startTime = farmStart;
+              endTime = farmEnd;
+              _selectedRunIndex = _farmAverageSentinel; // farm average
+            }
+          } else if (_runs.isNotEmpty) {
             int latestIdx = 0;
             DateTime latestEnd = _runs[0].endTime;
             for (int i = 1; i < _runs.length; i++) {
@@ -416,6 +437,8 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
           startTime = minT;
           endTime = maxT;
           _runs = const [];
+          _farms = const [];
+          _selectedFarmId = null;
           _selectedRunIndex = -1;
           // Start with 'All' to ensure visibility by default
           currentMetric = 'All';
@@ -761,6 +784,38 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
     gltfModelPath = null;
   }
 
+  // Helpers for farm-based run selection
+  List<int> _runsForFarm(int farmId) {
+    final farm = _farms.firstWhere((f) => f.id == farmId);
+    return List<int>.from(farm.runIndices);
+  }
+
+  void _selectFarmAverage(int farmId) {
+    final indices = _runsForFarm(farmId);
+    if (indices.isEmpty) return;
+    final farmStart = indices.map((i) => _runs[i].startTime).reduce((a, b) => a.isBefore(b) ? a : b);
+    final farmEnd = indices.map((i) => _runs[i].endTime).reduce((a, b) => a.isAfter(b) ? a : b);
+    setState(() {
+      _selectedFarmId = farmId;
+      _selectedRunIndex = _farmAverageSentinel; // farm average sentinel
+      startTime = farmStart;
+      endTime = farmEnd;
+    });
+    _updateGridAndValues();
+  }
+
+  void _selectSpecificRun(int runIndex) {
+    if (runIndex < 0 || runIndex >= _runs.length) return;
+    final run = _runs[runIndex];
+    setState(() {
+      _selectedFarmId = _farms.firstWhere((f) => f.runIndices.contains(runIndex)).id;
+      _selectedRunIndex = runIndex;
+      startTime = run.startTime;
+      endTime = run.endTime;
+    });
+    _updateGridAndValues();
+  }
+
   Future<bool> _ensureStoragePermission() async {
     final androidInfo = await DeviceInfoPlugin().androidInfo;
     final sdk = androidInfo.version.sdkInt;
@@ -812,6 +867,53 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  // Farm/Run selector pills (minimal, themed)
+                  if (_farms.isNotEmpty)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          ..._farms.map((f) {
+                            final bool isSelectedFarm = _selectedFarmId == f.id && _selectedRunIndex == _farmAverageSentinel;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: FilterChip(
+                                label: Text('Farm ${f.id}'),
+                                selected: isSelectedFarm,
+                                onSelected: (_) => _selectFarmAverage(f.id),
+                              ),
+                            );
+                          }),
+                          if (_selectedFarmId != null)
+                            PopupMenuButton<int>(
+                              tooltip: 'Select specific run',
+                              icon: const Icon(Icons.more_horiz),
+                              onSelected: (runIdx) => _selectSpecificRun(runIdx),
+                              itemBuilder: (context) {
+                                final runIndices = _runsForFarm(_selectedFarmId!);
+                                runIndices.sort((a, b) => _runs[a].startTime.compareTo(_runs[b].startTime));
+                                return [
+                                  PopupMenuItem<int>(
+                                    value: _farmAverageSentinel,
+                                    child: const Text('Farm Average'),
+                                    onTap: () => _selectFarmAverage(_selectedFarmId!),
+                                  ),
+                                  const PopupMenuDivider(),
+                                  ...List.generate(runIndices.length, (i) {
+                                    final idx = runIndices[i];
+                                    final run = _runs[idx];
+                                    return PopupMenuItem<int>(
+                                      value: idx,
+                                      child: Text('Run ${i + 1} • ${run.startTime.toString().split('.')[0]}'),
+                                    );
+                                  }),
+                                ];
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  if (_farms.isNotEmpty) const SizedBox(height: 8),
                   // Metrics row (top) with toggle button
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -1007,11 +1109,46 @@ class _HeatmapScreenState extends State<HeatmapScreen> {
       appBar: AppBar(
         title: const Text('Heatmap Viewer'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.timeline),
-            tooltip: 'Select Run',
-            onPressed: _showRunsDialog,
-          ),
+          // Quick farm selection in app bar for minimalist access
+          if (_farms.isNotEmpty)
+            PopupMenuButton<int>(
+              tooltip: 'Select Farm/Run',
+              icon: const Icon(Icons.agriculture),
+              onSelected: (value) {
+                if (value == _farmAverageSentinel) {
+                  if (_selectedFarmId != null) _selectFarmAverage(_selectedFarmId!);
+                } else {
+                  _selectSpecificRun(value);
+                }
+              },
+              itemBuilder: (context) {
+                final items = <PopupMenuEntry<int>>[];
+                for (final f in _farms) {
+                  items.add(PopupMenuItem<int>(
+                    enabled: false,
+                    child: Text('Farm ${f.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ));
+                  items.add(PopupMenuItem<int>(
+                    value: _farmAverageSentinel,
+                    child: const Text('• Farm Average'),
+                    onTap: () => _selectFarmAverage(f.id),
+                  ));
+                  final runIndices = List<int>.from(f.runIndices)..sort((a, b) => _runs[a].startTime.compareTo(_runs[b].startTime));
+                  for (int i = 0; i < runIndices.length; i++) {
+                    final idx = runIndices[i];
+                    items.add(PopupMenuItem<int>(
+                      value: idx,
+                      child: Text('• Run ${i + 1}'),
+                    ));
+                  }
+                  items.add(const PopupMenuDivider());
+                }
+                if (items.isNotEmpty && items.last is PopupMenuDivider) {
+                  items.removeLast();
+                }
+                return items;
+              },
+            ),
           IconButton(
             icon: Icon(is3DView ? Icons.view_agenda : Icons.view_in_ar),
             onPressed: _toggleView,
