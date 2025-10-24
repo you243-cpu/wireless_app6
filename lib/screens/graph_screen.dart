@@ -193,7 +193,7 @@ class _GraphScreenState extends State<GraphScreen> {
       final statusPerRun = filterSeries(statusPerRunFull);
 
       _dataLength = filteredTimestamps.length;
-      final Widget body = Column(
+      final Widget content = Column(
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -271,13 +271,14 @@ class _GraphScreenState extends State<GraphScreen> {
           ],
         ),
       );
-      if (widget.embedded) return body;
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text("📊 Graphs"),
-        ),
-        body: body,
-      );
+      return widget.embedded
+          ? content
+          : Scaffold(
+              appBar: AppBar(
+                title: const Text("📊 Graphs"),
+              ),
+              body: content,
+            );
     }
 
     // Build per-run average series for each metric
@@ -292,7 +293,7 @@ class _GraphScreenState extends State<GraphScreen> {
     // Plant status encoded and averaged per run
     final statusPerRun = _statusPerRunAll;
 
-    final Widget body = Column(
+    final Widget content = Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -438,12 +439,12 @@ class _GraphScreenState extends State<GraphScreen> {
           ),
         ],
       );
-    if (widget.embedded) return body;
+    if (widget.embedded) return content;
     return Scaffold(
       appBar: AppBar(
         title: const Text("📊 Graphs"),
       ),
-      body: body,
+      body: content,
     );
   }
 }
