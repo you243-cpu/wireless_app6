@@ -36,9 +36,7 @@ class _GraphScreenState extends State<GraphScreen> {
     final provider = context.watch<CSVDataProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final tabLabelColor = isDark ? Colors.tealAccent : Colors.green;
-    final unselectedTabColor = isDark ? Colors.grey[400]! : Colors.grey[600]!;
-    final iconColor = isDark ? Colors.tealAccent : Colors.black87;
+    final iconColor = Theme.of(context).iconTheme.color ?? (isDark ? Colors.white70 : Colors.black87);
 
     if (!provider.hasData) {
       final Widget body = const Center(child: Text("No data available."));
@@ -195,57 +193,53 @@ class _GraphScreenState extends State<GraphScreen> {
       final statusPerRun = filterSeries(statusPerRunFull);
 
       _dataLength = filteredTimestamps.length;
-
       final Widget body = Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(onPressed: zoomIn, icon: Icon(Icons.zoom_in, color: iconColor)),
-              IconButton(onPressed: zoomOut, icon: Icon(Icons.zoom_out, color: iconColor)),
-              IconButton(onPressed: scrollLeft, icon: Icon(Icons.arrow_left, color: iconColor)),
-              IconButton(onPressed: scrollRight, icon: Icon(Icons.arrow_right, color: iconColor)),
-            ],
-          ),
-          farmSelector(),
-          Expanded(
-            child: DefaultTabController(
-              length: 9,
-              child: Column(
-                children: [
-                  TabBar(
-                    isScrollable: true,
-                    labelColor: tabLabelColor,
-                    unselectedLabelColor: unselectedTabColor,
-                    indicatorColor: tabLabelColor,
-                    tabs: const [
-                      Tab(text: "pH"),
-                      Tab(text: "N"),
-                      Tab(text: "P"),
-                      Tab(text: "K"),
-                      Tab(text: "Temperature"),
-                      Tab(text: "Humidity"),
-                      Tab(text: "EC"),
-                      Tab(text: "Plant Status"),
-                      Tab(text: "All"),
-                    ],
-                  ),
-                  Expanded(
-                    child: TabBarView(
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        LineChartWidget(data: pHPerRun, color: Colors.green, label: "pH", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
-                        LineChartWidget(data: nPerRun, color: Colors.blue, label: "N", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
-                        LineChartWidget(data: pPerRun, color: Colors.orange, label: "P", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
-                        LineChartWidget(data: kPerRun, color: Colors.purple, label: "K", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
-                        LineChartWidget(data: temperaturePerRun, color: Colors.red, label: "Temperature", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
-                        LineChartWidget(data: humidityPerRun, color: Colors.cyan, label: "Humidity", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
-                        LineChartWidget(data: ecPerRun, color: Colors.indigo, label: "EC", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
-                        Column(children: [
-                          const SizedBox(height: 8),
-                          const PlantStatusLegend(axis: Axis.horizontal, isDense: true, numericOnly: false),
-                          Expanded(child: LineChartWidget(data: statusPerRun, color: Colors.teal, label: "Plant Status (count or No Turmeric)", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex)),
-                        ]),
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(onPressed: zoomIn, icon: Icon(Icons.zoom_in, color: iconColor)),
+                IconButton(onPressed: zoomOut, icon: Icon(Icons.zoom_out, color: iconColor)),
+                IconButton(onPressed: scrollLeft, icon: Icon(Icons.arrow_left, color: iconColor)),
+                IconButton(onPressed: scrollRight, icon: Icon(Icons.arrow_right, color: iconColor)),
+              ],
+            ),
+            farmSelector(),
+            Expanded(
+              child: DefaultTabController(
+                length: 9,
+                child: Column(
+                  children: [
+                    TabBar(
+                      isScrollable: true,
+                      tabs: const [
+                        Tab(text: "pH"),
+                        Tab(text: "N"),
+                        Tab(text: "P"),
+                        Tab(text: "K"),
+                        Tab(text: "Temperature"),
+                        Tab(text: "Humidity"),
+                        Tab(text: "EC"),
+                        Tab(text: "Plant Status"),
+                        Tab(text: "All"),
+                      ],
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        physics: const NeverScrollableScrollPhysics(),
+                        children: [
+                          LineChartWidget(data: pHPerRun, color: Colors.green, label: "pH", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
+                          LineChartWidget(data: nPerRun, color: Colors.blue, label: "N", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
+                          LineChartWidget(data: pPerRun, color: Colors.orange, label: "P", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
+                          LineChartWidget(data: kPerRun, color: Colors.purple, label: "K", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
+                          LineChartWidget(data: temperaturePerRun, color: Colors.red, label: "Temperature", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
+                          LineChartWidget(data: humidityPerRun, color: Colors.cyan, label: "Humidity", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
+                          LineChartWidget(data: ecPerRun, color: Colors.indigo, label: "EC", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex),
+                          Column(children: [
+                            const SizedBox(height: 8),
+                            const PlantStatusLegend(axis: Axis.horizontal, isDense: true, numericOnly: false),
+                            Expanded(child: LineChartWidget(data: statusPerRun, color: Colors.teal, label: "Plant Status (count or No Turmeric)", timestamps: filteredTimestamps, zoomLevel: zoomLevel, scrollIndex: scrollIndex)),
+                          ]),
                         MultiLineChartWidget(
                           pHData: pHPerRun,
                           nData: nPerRun,
@@ -258,29 +252,34 @@ class _GraphScreenState extends State<GraphScreen> {
                           zoomLevel: zoomLevel,
                           scrollIndex: scrollIndex,
                           combinedSeries: _buildCombinedIdealSeries(
-                            pHPerRun, nPerRun, pPerRun, kPerRun, temperaturePerRun, humidityPerRun, ecPerRun,
+                            pHPerRun,
+                            nPerRun,
+                            pPerRun,
+                            kPerRun,
+                            temperaturePerRun,
+                            humidityPerRun,
+                            ecPerRun,
                           ),
                         ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
-      ); // IMPORTANT: end with a semicolon, not a comma
-
+          ],
+        ),
+      );
       if (widget.embedded) return body;
       return Scaffold(
         appBar: AppBar(
           title: const Text("📊 Graphs"),
-          backgroundColor: isDark ? Colors.black : Colors.green[100],
-          foregroundColor: isDark ? Colors.white : Colors.black,
         ),
         body: body,
       );
     }
+
     // Build per-run average series for each metric
     final pHPerRun = RunSegmentationService.averagesForMetric(summaries, 'pH');
     final nPerRun = RunSegmentationService.averagesForMetric(summaries, 'N');
@@ -320,9 +319,6 @@ class _GraphScreenState extends State<GraphScreen> {
                 children: [
                   TabBar(
                     isScrollable: true,
-                    labelColor: tabLabelColor,
-                    unselectedLabelColor: unselectedTabColor,
-                    indicatorColor: tabLabelColor,
                     tabs: const [
                       Tab(text: "pH"),
                       Tab(text: "N"),
@@ -446,8 +442,6 @@ class _GraphScreenState extends State<GraphScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("📊 Graphs"),
-        backgroundColor: isDark ? Colors.black : Colors.green[100],
-        foregroundColor: isDark ? Colors.white : Colors.black,
       ),
       body: body,
     );
