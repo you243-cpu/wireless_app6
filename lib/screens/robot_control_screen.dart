@@ -567,6 +567,26 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
                       _buildRecordingPanel(),
                       const SizedBox(height: 30),
 
+                      // Inline quick actions
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: () => _openPlaybackDialog(context),
+                            icon: const Icon(Icons.playlist_play),
+                            label: const Text("Play Saved Recording"),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () => _openCustomizationDialog(context),
+                            icon: const Icon(Icons.tune),
+                            label: const Text("Edit Controls"),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 30),
+
                       Text(
                         "Directional Controls",
                         style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: primaryColor),
@@ -583,10 +603,16 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
                       _buildActionButtons(context),
                       const SizedBox(height: 40),
 
-                      TextButton.icon(
-                        icon: const Icon(Icons.refresh, color: Colors.grey),
-                        label: const Text("Restore Default Controls", style: TextStyle(color: Colors.grey)),
-                        onPressed: () => _confirmReset(context),
+                      Builder(
+                        builder: (context) {
+                          final scheme = Theme.of(context).colorScheme;
+                          final Color subtle = Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6) ?? scheme.onSurfaceVariant;
+                          return TextButton.icon(
+                            icon: Icon(Icons.refresh, color: subtle),
+                            label: Text("Restore Default Controls", style: TextStyle(color: subtle)),
+                            onPressed: () => _confirmReset(context),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -622,19 +648,20 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
   // UI shown when playback is active
   Widget _buildPlaybackStatus() {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.movie, size: 80, color: Colors.green),
+          Icon(Icons.movie, size: 80, color: scheme.primary),
           const SizedBox(height: 20),
-          const Text(
+          Text(
             "PATH PLAYBACK ACTIVE",
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green),
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: scheme.primary),
           ),
-          const Text(
+          Text(
             "Controls are disabled to prevent interruption.",
-            style: TextStyle(fontSize: 16, color: Colors.grey),
+            style: TextStyle(fontSize: 16, color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7)),
           ),
           const SizedBox(height: 40),
           ElevatedButton.icon(
@@ -647,8 +674,8 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
               _showSnackBar("🛑 Playback interrupted by user.");
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade800,
-              foregroundColor: Colors.white,
+              backgroundColor: scheme.error,
+              foregroundColor: scheme.onError,
               padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
             ),
           )
@@ -659,6 +686,7 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
   // UI for the recording status and controls
   Widget _buildRecordingPanel() {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
     Color statusColor = Colors.grey;
     String statusText = "Ready to Record";
     IconData statusIcon = Icons.radio_button_off;
@@ -698,7 +726,10 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
                 icon: const Icon(Icons.videocam),
                 label: const Text("Start Recording"),
                 onPressed: _toggleRecording,
-                style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+                style: FilledButton.styleFrom(
+                  backgroundColor: scheme.primary,
+                  foregroundColor: scheme.onPrimary,
+                ),
               ),
             
             if (_recordingState != RecordingState.stopped)
@@ -706,7 +737,10 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
                 icon: Icon(_recordingState == RecordingState.recording ? Icons.pause : Icons.play_arrow),
                 label: Text(_recordingState == RecordingState.recording ? "Pause" : "Resume"),
                 onPressed: _toggleRecording,
-                style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade700),
+                style: FilledButton.styleFrom(
+                  backgroundColor: scheme.secondary,
+                  foregroundColor: scheme.onSecondary,
+                ),
               ),
             
             if (_recordingState != RecordingState.stopped)
@@ -714,7 +748,10 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
                 icon: const Icon(Icons.stop),
                 label: const Text("End & Save Path"),
                 onPressed: _endRecording,
-                style: FilledButton.styleFrom(backgroundColor: Colors.blueGrey),
+                style: FilledButton.styleFrom(
+                  backgroundColor: scheme.tertiary,
+                  foregroundColor: scheme.onTertiary,
+                ),
               ),
           ],
         )
@@ -780,6 +817,15 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
       {bool isCritical = false}) {
     if (command == null) return const SizedBox(width: 90, height: 90);
 
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final bool isCustomColor = command.buttonColorHex != null;
+    final Color background = isCustomColor
+        ? command.color
+        : (isCritical ? scheme.error : scheme.primaryContainer);
+    final Color foreground = isCustomColor
+        ? (command.color.computeLuminance() > 0.5 ? Colors.black87 : Colors.white)
+        : (isCritical ? scheme.onError : scheme.onPrimaryContainer);
+
     return SizedBox(
       width: 90,
       height: 90,
@@ -787,11 +833,11 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
         onPressed: () => _sendCommandAndRecord(command.command),
         style: ElevatedButton.styleFrom(
           shape: const CircleBorder(),
-          backgroundColor: command.color, // Use custom color
-          foregroundColor: Colors.white,
+          backgroundColor: background,
+          foregroundColor: foreground,
           elevation: 5,
         ),
-        child: _getButtonContent(command, size: 40),
+        child: _getButtonContent(command, size: 40, overrideContentColor: foreground),
       ),
     );
   }
@@ -799,11 +845,23 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
   // Reusable widget for styled rectangular action buttons (Calls original sendCommand)
   Widget _buildStyledActionButton(
       CommandButton command, BuildContext context) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final bool isCustomColor = command.buttonColorHex != null;
+    final bool isCritical = command.command.toLowerCase() == 'emergency_stop' ||
+        command.command.toLowerCase() == 'stop' ||
+        command.label.toLowerCase().contains('emergency');
+    final Color background = isCustomColor
+        ? command.color
+        : (isCritical ? scheme.error : scheme.secondaryContainer);
+    final Color foreground = isCustomColor
+        ? (command.color.computeLuminance() > 0.5 ? Colors.black87 : Colors.white)
+        : (isCritical ? scheme.onError : scheme.onSecondaryContainer);
+
     return ElevatedButton(
       onPressed: () => sendCommand(command.command),
       style: ElevatedButton.styleFrom(
-        backgroundColor: command.color, // Use custom color
-        foregroundColor: Colors.white,
+        backgroundColor: background,
+        foregroundColor: foreground,
         padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
@@ -813,18 +871,22 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _getButtonContent(command, size: 24),
+          _getButtonContent(command, size: 24, overrideContentColor: foreground),
           if (command.label.isNotEmpty) const SizedBox(width: 8),
-          Text(command.label.toUpperCase(), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(
+            command.label.toUpperCase(),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: foreground),
+          ),
         ],
       ),
     );
   }
 
   // Handles the content (Icon, Image, or Text) of a button
-  Widget _getButtonContent(CommandButton command, {double size = 40}) {
-    // Determine appropriate icon color based on button color luminance
-    final Color contentColor = command.color.computeLuminance() > 0.5 ? Colors.black87 : Colors.white;
+  Widget _getButtonContent(CommandButton command, {double size = 40, Color? overrideContentColor}) {
+    // Determine appropriate icon color based on background luminance or override
+    final Color contentColor = overrideContentColor ??
+        (command.color.computeLuminance() > 0.5 ? Colors.black87 : Colors.white);
 
     if (command.iconData != null) {
       return Icon(command.iconData, size: size, color: contentColor);
@@ -942,14 +1004,22 @@ class _RobotControlScreenState extends State<RobotControlScreen> {
 
 class PathPreviewPainter extends CustomPainter {
   final List<SequenceCommand> commands;
+  final Color pathColor;
+  final Color startDotColor;
+  final Color endDotColor;
   final double scaleFactor = 6.0; // Reduced scale for compact preview
 
-  PathPreviewPainter(this.commands);
+  PathPreviewPainter(
+    this.commands, {
+    required this.pathColor,
+    required this.startDotColor,
+    required this.endDotColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.teal.shade500 // Use theme color for path
+      ..color = pathColor // Use theme color for path
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
 
@@ -961,7 +1031,7 @@ class PathPreviewPainter extends CustomPainter {
     path.moveTo(currentX, currentY);
 
     // Initial point (dot)
-    canvas.drawCircle(startPoint, 3, Paint()..color = Colors.green.shade600..style = PaintingStyle.fill);
+    canvas.drawCircle(startPoint, 3, Paint()..color = startDotColor..style = PaintingStyle.fill);
 
 
     for (final cmd in commands) {
@@ -1002,7 +1072,7 @@ class PathPreviewPainter extends CustomPainter {
     canvas.drawPath(path, paint);
 
     // Final point (red dot)
-    canvas.drawCircle(Offset(currentX, currentY), 3, Paint()..color = Colors.red.shade600..style = PaintingStyle.fill);
+    canvas.drawCircle(Offset(currentX, currentY), 3, Paint()..color = endDotColor..style = PaintingStyle.fill);
   }
 
   @override
@@ -1176,7 +1246,12 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: CustomPaint(
-                                  painter: PathPreviewPainter(sequence.commands),
+                                  painter: PathPreviewPainter(
+                                    sequence.commands,
+                                    pathColor: Theme.of(context).colorScheme.primary,
+                                    startDotColor: Theme.of(context).colorScheme.tertiary,
+                                    endDotColor: Theme.of(context).colorScheme.error,
+                                  ),
                                   child: const SizedBox.expand(),
                                 ),
                               ),
@@ -1188,7 +1263,7 @@ class __PlaybackDialogState extends State<_PlaybackDialog> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: Colors.deepOrange.shade600, // Theme color
+                                    color: Theme.of(context).colorScheme.secondary,
                                     borderRadius: BorderRadius.circular(6),
                                     boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 3)],
                                   ),
