@@ -269,8 +269,7 @@ class _GraphScreenState extends State<GraphScreen> {
               ),
             ),
           ],
-        ),
-      );
+        );
       return widget.embedded
           ? content
           : Scaffold(
