@@ -152,7 +152,6 @@ class _GraphScreenState extends State<GraphScreen> {
                   padding: const EdgeInsets.only(right: 8.0),
                   child: FilterChip(
                     label: Text('Farm ${f.id}')
-                  ,
                     selected: _selectedFarmId == f.id,
                     onSelected: (_) => setState(() { _selectedFarmId = f.id; }),
                   ),
